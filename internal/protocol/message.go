@@ -171,6 +171,30 @@ type ControlChangedMsg struct {
 	ActiveWriterRole string `json:"active_writer_role"`
 }
 
+// KillSwitchMsg is host -> relay: disconnect every current viewer
+// without ending the session itself. The wrapped process and the
+// session keep running; the host can set a new password and reshare
+// afterward.
+type KillSwitchMsg struct {
+	Envelope
+}
+
+// KickedMsg is relay -> viewer, sent (with CloseKicked following) when
+// the host triggers the kill switch.
+type KickedMsg struct {
+	Envelope
+	Reason string `json:"reason"`
+}
+
+const ReasonKillSwitch = "kill_switch"
+
+// EndSessionMsg is host -> relay: an explicit, clean end to the
+// session - sent right before the host process exits, as opposed to the
+// relay inferring host_disconnected from an abrupt connection drop.
+type EndSessionMsg struct {
+	Envelope
+}
+
 // Custom WebSocket close codes, application range per RFC 6455. See
 // docs/protocol.md's "Socket lifecycle" section.
 const (

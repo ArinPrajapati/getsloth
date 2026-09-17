@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/arinprajapati/getsloth/internal/hostauth"
+	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
 func main() {
@@ -49,8 +52,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "getsloth: could not reach relay at %s: %v\n", relayURL, err)
 		fmt.Fprintln(os.Stderr, "getsloth: continuing locally only - nobody can watch this session")
 	} else {
-		defer func() { _ = ws.Close() }()
-
 		keys, err := hostauth.NewKeyPair()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "getsloth: could not generate session keys:", err)
@@ -73,7 +74,40 @@ func main() {
 
 		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
+
+		// Host-triggered actions per docs/protocol.md: reclaiming
+		// control and the kill switch. v0 doesn't scan the host's raw
+		// keystroke stream for a hotkey (fragile - a byte matching the
+		// hotkey could legitimately appear split across two reads from
+		// a real program's output); a signal is a simpler, reliable
+		// "host-triggered" mechanism for the same intent, scriptable
+		// via `kill -USR2 <pid>` (reclaim control) or `kill -USR1 <pid>`
+		// (kill switch).
+		signals := make(chan os.Signal, 2)
+		signal.Notify(signals, syscall.SIGUSR1, syscall.SIGUSR2)
+		go func() {
+			for sig := range signals {
+				switch sig {
+				case syscall.SIGUSR2:
+					_ = ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
+				case syscall.SIGUSR1:
+					_ = ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
+					fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+				}
+			}
+		}()
 	}
 
-	os.Exit(run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady))
+	exitCode := run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady)
+
+	if ws != nil {
+		// os.Exit below skips deferred functions, so cleanup happens
+		// here explicitly: tell the relay this is a clean end (not an
+		// abrupt drop, which would otherwise be indistinguishable) per
+		// docs/protocol.md's SessionEndedMsg reasons, then close.
+		_ = ws.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")})
+		_ = ws.Close()
+	}
+
+	os.Exit(exitCode)
 }

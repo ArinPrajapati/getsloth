@@ -110,6 +110,10 @@ func (s *Server) handleHostMessage(session *Session, raw []byte) {
 		if host != nil {
 			s.handleTakeControl(session, host)
 		}
+	case "kill_switch":
+		s.handleKillSwitch(session)
+	case "end_session":
+		session.teardown(protocol.ReasonProcessExited)
 	}
 }
 

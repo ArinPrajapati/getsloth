@@ -25,10 +25,15 @@ output latency, well under the 300ms target.
 
 - [x] B5: Password auth — local verification + rate limiting
 - [x] B6: Control handoff — single active writer + host override
-- [ ] B7: Kill switch
-- [ ] B8: Session teardown + reconnect resilience
+- [x] B7: Kill switch
+- [x] B8: Session teardown + reconnect resilience
 
-**Checkpoint:** Backend feature-complete.
+**Checkpoint:** Backend feature-complete. ✅ B1-B8 all done, 91.7%
+coverage on internal/relay, real end-to-end tests (not just unit tests)
+for the crypto auth flow, control handoff, and kill switch. Open items:
+confirm module path before going public, manual interactive-terminal
+check still needed, signal-based host triggers (kill switch/reclaim)
+aren't discoverable in-session yet.
 
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
 - [ ] F1: Project scaffold + tooling wired to CONSTRAINTS.md
