@@ -80,6 +80,11 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 
 	session.teardown(protocol.ReasonHostDisconnected)
 	s.registry.remove(session.ID)
+	// Without this, rate-limiter entries for this session (cooldowns,
+	// in-flight reservation counts) would persist for the lifetime of
+	// the relay process, not just the session - nothing else ties
+	// rate-limiter state to session lifecycle.
+	s.rateLimiter.clearSession(session.ID)
 }
 
 // handleHostMessage decodes one message from the host connection and

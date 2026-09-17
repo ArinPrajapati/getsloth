@@ -11,6 +11,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -59,7 +60,11 @@ func (k *KeyPair) VerifyPassword(sessionID, viewerPubkeyBase64, ciphertextBase64
 	if err != nil {
 		return false
 	}
-	return attempt == actual
+	// The AEAD decrypt above already makes attempt tamper-proof, but the
+	// final comparison still needs to not leak timing information about
+	// how many leading bytes matched - subtle.ConstantTimeCompare, not
+	// ==, is the correct primitive for any password/secret comparison.
+	return subtle.ConstantTimeCompare([]byte(attempt), []byte(actual)) == 1
 }
 
 func (k *KeyPair) decrypt(sessionID, viewerPubkeyBase64, ciphertextBase64 string) (string, error) {

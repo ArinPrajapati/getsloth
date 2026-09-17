@@ -15,7 +15,21 @@ func (s *Server) handleKillSwitch(session *Session) {
 	}
 	session.viewers = map[string]*Connection{}
 	session.tokens = map[string]string{}
+
+	// Any auth attempt still awaiting a host verdict at this moment
+	// belongs to a connection about to be kicked - clear it now rather
+	// than waiting for the host to eventually respond to a viewer that
+	// no longer exists. Without this, the rate-limit reservation
+	// handleAuthAttempt made for it would stay held until the host
+	// happens to respond (or the whole session tears down), needlessly
+	// eating into that address's MaxConcurrentAuthAttempts budget.
+	pending := session.pendingAuth
+	session.pendingAuth = map[string]pendingAuth{}
 	session.mu.Unlock()
+
+	for _, p := range pending {
+		s.rateLimiter.release(session.ID, p.remoteAddr)
+	}
 
 	for _, v := range viewers {
 		_ = v.writeJSON(protocol.KickedMsg{

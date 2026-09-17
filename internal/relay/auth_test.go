@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -128,15 +129,88 @@ func TestAuth_RateLimitedAfterMaxFailures(t *testing.T) {
 	}
 
 	// The (RateLimitMaxAttempts+1)th attempt must be rejected without
-	// even reaching the host - simulateHostAuthResponder only answers
-	// auth_request, so if the relay still contacted the host we'd get
-	// AUTH_FAILED, not RATE_LIMITED.
+	// even reaching the host - hostStub only answers auth_request, so
+	// if the relay still contacted the host we'd get AUTH_FAILED, not
+	// RATE_LIMITED.
 	result := authenticateViewer(t, viewer)
 	if result.Code != protocol.AuthCodeRateLimited {
 		t.Errorf("code = %q, want %q after %d failed attempts", result.Code, protocol.AuthCodeRateLimited, RateLimitMaxAttempts)
 	}
 	if result.RetryAfterMs <= 0 {
 		t.Errorf("retry_after_ms = %d, want > 0", result.RetryAfterMs)
+	}
+}
+
+// TestAuth_ConcurrentFlood_BeforeAnyResponse_IsCapped is the regression
+// test for a real vulnerability found in review: the cooldown-based
+// rate limit only counts *completed* round-trips (it's incremented from
+// the host's response), so a burst of auth messages sent before any of
+// them has had time to fail wasn't limited at all - each one reached
+// the host regardless of how many were already in flight. This proves
+// MaxConcurrentAuthAttempts closes that gap independently of the
+// cooldown mechanism.
+func TestAuth_ConcurrentFlood_BeforeAnyResponse_IsCapped(t *testing.T) {
+	base, cleanup := newTestServer(t)
+	defer cleanup()
+
+	host := dial(t, base+"/ws/host")
+	var created protocol.SessionCreatedMsg
+	readMsg(t, host, &created)
+
+	// A host stub that reads auth_request but deliberately never
+	// responds - holding every attempt "in flight" for the duration of
+	// the test, which is exactly the flood scenario: many attempts sent
+	// before any round-trip completes.
+	authRequests := make(chan protocol.AuthRequestMsg, MaxConcurrentAuthAttempts+2)
+	go func() {
+		for {
+			_, raw, err := host.ReadMessage()
+			if err != nil {
+				return
+			}
+			var req protocol.AuthRequestMsg
+			if err := json.Unmarshal(raw, &req); err != nil {
+				continue
+			}
+			authRequests <- req
+		}
+	}()
+
+	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
+
+	for i := 0; i < MaxConcurrentAuthAttempts; i++ {
+		if err := viewer.WriteJSON(protocol.AuthMsg{
+			Envelope:           protocol.NewEnvelope("auth"),
+			ViewerPubkeyBase64: "test-pubkey",
+			CiphertextBase64:   "test-ciphertext",
+		}); err != nil {
+			t.Fatalf("sending auth attempt #%d: %v", i, err)
+		}
+	}
+
+	// Confirm all MaxConcurrentAuthAttempts genuinely reached the host -
+	// otherwise the next check (the extra one being rejected) would be
+	// trivially true for the wrong reason.
+	for i := 0; i < MaxConcurrentAuthAttempts; i++ {
+		select {
+		case <-authRequests:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("only %d of %d attempts reached the host", i, MaxConcurrentAuthAttempts)
+		}
+	}
+
+	// The next attempt, sent while all prior ones are still
+	// unresolved, must be rejected as RATE_LIMITED without an
+	// auth_request ever reaching the host for it.
+	result := authenticateViewer(t, viewer)
+	if result.Code != protocol.AuthCodeRateLimited {
+		t.Errorf("code = %q, want %q for an attempt beyond MaxConcurrentAuthAttempts with none resolved", result.Code, protocol.AuthCodeRateLimited)
+	}
+	select {
+	case <-authRequests:
+		t.Error("an auth_request reached the host beyond MaxConcurrentAuthAttempts - the concurrent cap did not hold")
+	case <-time.After(300 * time.Millisecond):
+		// correct - nothing more arrived
 	}
 }
 

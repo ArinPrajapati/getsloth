@@ -43,7 +43,25 @@ func (s *Server) handleViewerMessage(session *Session, conn *Connection, remoteA
 }
 
 func (s *Server) handleAuthAttempt(session *Session, conn *Connection, remoteAddr string, raw []byte) {
-	if blocked, retryAfter := s.rateLimiter.blocked(session.ID, remoteAddr); blocked {
+	// Re-authenticating an already-authenticated connection is wasted
+	// host decrypt work for no protocol benefit - ignore it rather than
+	// process it.
+	if conn.isAuthenticated() {
+		return
+	}
+
+	// tryReserve enforces two independent things at once: the cooldown
+	// from repeated completed failures (what "blocked" used to check
+	// alone), and a cap on concurrent in-flight attempts. The cooldown
+	// alone doesn't catch a flood of auth messages sent before any of
+	// them have had time to fail yet - none of those are "blocked" by a
+	// failure count that hasn't been incremented, since recordFailure
+	// only fires once a response comes back. See docs/protocol.md's
+	// Rate limiting section for the confirmed per-completed-attempt
+	// cooldown; MaxConcurrentAuthAttempts is this relay's own addition
+	// to close that gap, not a protocol-specified value.
+	reserved, retryAfter := s.rateLimiter.tryReserve(session.ID, remoteAddr)
+	if !reserved {
 		_ = conn.writeJSON(protocol.AuthResultMsg{
 			Envelope:     protocol.NewEnvelope("auth_result"),
 			OK:           false,
@@ -55,11 +73,13 @@ func (s *Server) handleAuthAttempt(session *Session, conn *Connection, remoteAdd
 
 	var msg protocol.AuthMsg
 	if err := json.Unmarshal(raw, &msg); err != nil {
+		s.rateLimiter.release(session.ID, remoteAddr)
 		return
 	}
 
 	requestID, err := newRandomID()
 	if err != nil {
+		s.rateLimiter.release(session.ID, remoteAddr)
 		return
 	}
 
@@ -67,6 +87,7 @@ func (s *Server) handleAuthAttempt(session *Session, conn *Connection, remoteAdd
 	host := session.host
 	if host == nil || session.closed {
 		session.mu.Unlock()
+		s.rateLimiter.release(session.ID, remoteAddr)
 		_ = conn.writeJSON(protocol.AuthResultMsg{
 			Envelope: protocol.NewEnvelope("auth_result"),
 			OK:       false,
@@ -87,6 +108,8 @@ func (s *Server) handleAuthAttempt(session *Session, conn *Connection, remoteAdd
 		ViewerPubkeyBase64: msg.ViewerPubkeyBase64,
 		CiphertextBase64:   msg.CiphertextBase64,
 	})
+	// The reservation made above is released in handleAuthResponse,
+	// once this attempt actually resolves - not here.
 }
 
 // handleAuthResponse completes a pending handleAuthAttempt once the host
@@ -101,6 +124,10 @@ func (s *Server) handleAuthResponse(session *Session, msg protocol.AuthResponseM
 	if !ok {
 		return
 	}
+	// Releases the reservation handleAuthAttempt made, on every exit
+	// path from here - success, failure, or the token-generation error
+	// path below.
+	defer s.rateLimiter.release(session.ID, pending.remoteAddr)
 
 	if !msg.OK {
 		s.rateLimiter.recordFailure(session.ID, pending.remoteAddr)
