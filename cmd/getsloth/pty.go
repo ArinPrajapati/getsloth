@@ -35,19 +35,47 @@ import (
 // after it's created, before the copy loops start - this is how the
 // caller gets a handle to write forwarded viewer input into the PTY
 // without pty.go needing to know anything about networking.
-func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic.Bool, onPTYReady func(*os.File)) int {
+//
+// panicKill, if non-nil, is the local panic-kill trigger: when it's
+// closed, the wrapped command and every process it spawned during the
+// session are terminated immediately with SIGKILL - the whole process
+// group, not just the top-level command, since a background process a
+// malicious actor started would otherwise survive killing just the
+// shell. The wrapped command is spawned in its own process group
+// (Setpgid) specifically to make this possible.
+func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic.Bool, onPTYReady func(*os.File), panicKill <-chan struct{}) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "getsloth: no command given")
 		return 2
 	}
 
 	cmd := exec.Command(args[0], args[1:]...)
+	// No explicit Setpgid here: pty.Start already calls setsid()
+	// internally (needed to assign the PTY as the controlling
+	// terminal), which makes the child both a session leader and its
+	// own process group leader in one step - cmd.Process.Pid already
+	// equals that process group's ID. Additionally setting Setpgid
+	// would try to setpgid() a session leader on itself, which POSIX
+	// disallows (EPERM) - confirmed by this exact failure when it was
+	// tried.
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "getsloth:", err)
 		return 1
 	}
 	defer func() { _ = ptmx.Close() }()
+
+	if panicKill != nil {
+		stopPanicWatch := make(chan struct{})
+		defer close(stopPanicWatch)
+		go func() {
+			select {
+			case <-panicKill:
+				killProcessGroup(cmd.Process.Pid)
+			case <-stopPanicWatch:
+			}
+		}()
+	}
 
 	if onPTYReady != nil {
 		onPTYReady(ptmx)
@@ -82,6 +110,16 @@ func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic
 		return 1
 	}
 	return 0
+}
+
+// killProcessGroup sends SIGKILL to the entire process group led by
+// pid - not just pid itself. Because the wrapped command is spawned
+// with Setpgid (see run), its process group ID equals its own PID, and
+// syscall.Kill with a negative PID targets the whole group: the wrapped
+// command and every child, grandchild, or background job it spawned
+// during the session, in one signal.
+func killProcessGroup(pid int) {
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
 // gatedWriter drops writes instead of forwarding them to dst whenever

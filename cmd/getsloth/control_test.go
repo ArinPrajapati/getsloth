@@ -76,7 +76,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f })
+		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f }, nil)
 	}()
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)

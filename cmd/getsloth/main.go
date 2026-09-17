@@ -76,13 +76,14 @@ func main() {
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
 
 		// Host-triggered actions per docs/protocol.md: reclaiming
-		// control and the kill switch. v0 doesn't scan the host's raw
-		// keystroke stream for a hotkey (fragile - a byte matching the
-		// hotkey could legitimately appear split across two reads from
-		// a real program's output); a signal is a simpler, reliable
-		// "host-triggered" mechanism for the same intent, scriptable
-		// via `kill -USR2 <pid>` (reclaim control) or `kill -USR1 <pid>`
-		// (kill switch).
+		// control and the (soft) kill switch. v0 doesn't scan the
+		// host's raw keystroke stream for a hotkey (fragile - a byte
+		// matching the hotkey could legitimately appear split across
+		// two reads from a real program's output); a signal is a
+		// simpler, reliable "host-triggered" mechanism for the same
+		// intent, scriptable via `kill -USR2 <pid>` (reclaim control)
+		// or `kill -USR1 <pid>` (soft kill switch - disconnects
+		// viewers, session stays alive).
 		signals := make(chan os.Signal, 2)
 		signal.Notify(signals, syscall.SIGUSR1, syscall.SIGUSR2)
 		go func() {
@@ -98,13 +99,41 @@ func main() {
 		}()
 	}
 
-	exitCode := run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady)
+	// Panic kill: a break-glass failsafe for "someone else may have
+	// control of my machine right now," distinct from the soft kill
+	// switch above. Available regardless of whether a relay connection
+	// exists - protecting the host's machine doesn't depend on
+	// networking. Triggered by SIGINT or SIGTERM (`kill <pid>` or
+	// `kill -INT <pid>`), and does two things in order: first cuts off
+	// the sloth session itself (best-effort - the network may be part
+	// of the problem, so this must never block the second, guaranteed
+	// step), then kills the wrapped command and every process it
+	// spawned during the session, not just the top-level one. The
+	// process itself then exits entirely - this is not something to
+	// casually continue past, a fresh session is started manually
+	// afterward if needed.
+	panicKill := make(chan struct{})
+	panicSignals := make(chan os.Signal, 1)
+	signal.Notify(panicSignals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-panicSignals
+		fmt.Fprintln(os.Stderr, "getsloth: PANIC KILL triggered - cutting off remote access, then terminating all session processes")
+		if ws != nil {
+			_ = ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
+			_ = ws.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")})
+			_ = ws.Close()
+		}
+		close(panicKill)
+	}()
+
+	exitCode := run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady, panicKill)
 
 	if ws != nil {
 		// os.Exit below skips deferred functions, so cleanup happens
 		// here explicitly: tell the relay this is a clean end (not an
 		// abrupt drop, which would otherwise be indistinguishable) per
-		// docs/protocol.md's SessionEndedMsg reasons, then close.
+		// docs/protocol.md's SessionEndedMsg reasons, then close. A
+		// no-op if the panic-kill path above already did this.
 		_ = ws.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")})
 		_ = ws.Close()
 	}
