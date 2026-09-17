@@ -28,7 +28,7 @@ TypeScript + xterm.js for the browser client. Full context in
   package boundary this depends on).
 - **Integration and manual multi-device verification (phone + laptop) is a
   human step**, not something either agent can fully self-verify — flagged
-  explicitly in Phase 3.
+  explicitly in Phase 2.
 
 ## Task List
 
@@ -291,7 +291,7 @@ TypeScript + xterm.js for the browser client. Full context in
 - [ ] All Backend tests pass, `scripts/check.sh` clean, `govulncheck ./...`
       clean (or findings triaged)
 - [ ] Full protocol from T0 is implemented relay-side
-- [ ] Review with founder before Phase 3 integration
+- [ ] Review with founder before Phase 2 integration
 
 ---
 
@@ -494,7 +494,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 ### Checkpoint: Frontend feature-complete
 - [ ] All Frontend tests pass, `npm run check` clean
 - [ ] axe/lighthouse thresholds met
-- [ ] Review with founder before Phase 3 integration
+- [ ] Review with founder before Phase 2 integration
 
 ---
 
@@ -555,7 +555,58 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
 ---
 
-### Phase 3: Launch Prep
+### Phase 3: UI/Design Pass
+
+Added after Phase 2 was scoped, explicitly sequenced to start only once
+Phase 2's checkpoint passes — the founder's call: functional correctness
+first, design pass second, not interleaved. Trigger: the functional
+Frontend (F1-F8) works but its current visual design is rough — this is
+a dedicated pass to actually design it, not a bug-fix task.
+
+- [ ] **Task D1: Visual design pass on the web viewer**
+
+  **Description:** A dedicated design session on top of the now
+  functionally-complete and integrated viewer UI — terminal view,
+  password gate, chat panel, take-control/presence indicator, mobile
+  quick-action overlay. Not a redesign of interaction/behavior (that's
+  already built and tested in F1-F8 and verified end-to-end in Phase 2)
+  — visual/brand design on top of working functionality: layout,
+  typography, color, spacing, the "lazy/mobile" brand feeling from
+  `docs/ideas/getsloth.md`, consistent across light/dark and
+  mobile/desktop.
+
+  **Acceptance criteria:**
+  - [ ] A coherent visual design system applied across every screen/state
+        the viewer can be in (password gate, live session, kicked,
+        session-ended)
+  - [ ] Mobile layout specifically reflects the actual headline pitch
+        (controlling from a phone), not just a shrunk desktop layout
+  - [ ] No regression to F1-F8's tested behavior - this is styling, not
+        a rebuild
+
+  **Verification:**
+  - [ ] Manual visual review (founder) - this is a design task, not one
+        with a meaningful automated test
+  - [ ] Re-run F1-F8's existing test suite to confirm no behavioral
+        regressions from the styling pass
+
+  **Dependencies:** Frontend checkpoint (F1-F8) AND Phase 2's checkpoint
+  (I1, I2) - explicitly sequenced after integration is verified, not
+  before or during
+
+  **Files likely touched:** `web/src/**/*.css`, component markup/class
+  names as needed to support the new design
+
+  **Estimated scope:** Medium-Large, design-effort-bound rather than
+  code-complexity-bound
+
+### Checkpoint: Design pass complete
+- [ ] Founder sign-off on visual design
+- [ ] F1-F8 test suite still green after the styling pass
+
+---
+
+### Phase 4: Launch Prep
 
 - [ ] **Task L1: LICENSE file (AGPL-3.0)**
 

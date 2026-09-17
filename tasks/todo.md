@@ -53,7 +53,17 @@ aren't discoverable in-session yet.
 
 **Checkpoint:** v0 works end-to-end on real devices, founder sign-off.
 
-## Phase 3: Launch Prep
+## Phase 3: UI/Design Pass
+Added after Phase 2 was scoped — explicitly sequenced to start only
+once Phase 2's checkpoint passes (founder's call: correctness first,
+design second). Not a redesign of behavior, a visual/brand design pass
+on top of the already-working, already-integrated Frontend.
+- [ ] D1: Visual design pass on the web viewer
+
+**Checkpoint:** Design pass complete — founder sign-off, F1-F8 tests
+still green.
+
+## Phase 4: Launch Prep
 - [ ] L1: LICENSE file (AGPL-3.0)
 - [ ] L2: README
 - [ ] L3: Deploy — Frontend to Vercel, relay to founder-provided server (bare-bones)
