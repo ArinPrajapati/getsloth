@@ -172,7 +172,13 @@ Viewer (already has host's                Relay                          Host CL
    the viewer's one-time public key, opaque to the relay — tagged with a
    `request_id` to correlate concurrent viewers.
 5. Host derives the shared secret, decrypts, compares locally, replies
-   `auth_response{request_id, ok}`.
+   `auth_response{request_id, ok}`. **If decryption itself fails**
+   (malformed ciphertext, wrong/stale key from a corrupted link, etc.),
+   the host replies `ok:false` — identically to a wrong-password result,
+   not a distinct error. This is deliberate: a distinguishable "your
+   ciphertext was malformed" response would be a small oracle leaking
+   information a failed attempt shouldn't; failing closed the same way
+   for both cases avoids that.
 6. **On `ok:true`, the relay generates a random session token and a
    `connection_id` for this viewer**, records both against the
    connection, and sends them in `auth_result`. The host never generates
@@ -208,8 +214,20 @@ rejected sender instead of reassigning. A viewer's own `take_control` is
 not similarly authoritative — only the host gets the lock window.
 
 `input` messages are only applied to the PTY if the sender is the current
-active writer; from anyone else they're silently dropped by the relay
-(not forwarded to the host).
+active writer; from a viewer that isn't, they're silently dropped by the
+relay (not forwarded to the host). When a viewer *is* the active writer,
+the relay forwards their input to the host as `InputForwardMsg` (see
+Message reference) and the host writes the decoded bytes to the PTY.
+
+**Host's own input never touches the network.** The host CLI owns the
+PTY directly, so when the host is the active writer, its local keystrokes
+are written straight to the PTY, with no WebSocket round-trip in either
+direction — there is no `InputMsg` the host sends to itself and no
+`InputForwardMsg` the host ever receives for its own typing. When the
+host is *not* the active writer (a viewer holds it), the host CLI must
+still read its own stdin but drop those keystrokes locally instead of
+writing them to the PTY, using the `control_changed` state it already
+has — this check is entirely local, no network call needed to make it.
 
 ## Quick actions — a Frontend concept, not a wire message
 
@@ -244,9 +262,9 @@ Hard caps, enforced by the relay; violation closes the connection with
 |---|---|
 | Any single WebSocket frame | 256 KiB |
 | `chat_message.text` | 2000 bytes (UTF-8) |
-| `input.data` (decoded) | 4096 bytes |
-| `output.data` (decoded, per message) | 65536 bytes — host/relay chunk larger output across multiple messages |
-| `auth.ciphertext_base64` (decoded) | 1024 bytes |
+| `input.data_base64`, decoded | 4096 bytes |
+| `output.data_base64`, decoded, per message | 65536 bytes — host/relay chunk larger output across multiple messages |
+| `auth.ciphertext_base64`, decoded | 1024 bytes |
 | `display_name` | 64 bytes |
 
 ## Socket lifecycle
@@ -361,6 +379,18 @@ interface AuthRequestMsg extends Envelope {
   viewer_pubkey_base64: string;
   ciphertext_base64: string;
 }
+
+// The missing piece in earlier drafts: the relay doesn't own the PTY, the
+// host does. Once a viewer's InputMsg passes the active-writer check, the
+// relay must forward it to the host so the host can write the decoded
+// bytes to the PTY. Sent ONLY when a viewer is the active writer — see
+// "Host's own input never touches the network" under Control model for
+// why the host never receives this for its own keystrokes.
+interface InputForwardMsg extends Envelope {
+  type: "input";
+  data_base64: string;
+  sender_id: string; // the viewer connection_id that sent it
+}
 ```
 
 ### Relay → Viewer (before/during auth)
@@ -395,14 +425,16 @@ interface OutputBroadcastMsg extends Envelope {
 ### Relay → all authenticated connections (host + every authenticated viewer)
 
 ```typescript
+// The host receives this too — it needs to know when to stop writing its
+// own local keystrokes to the PTY, exactly like a viewer's input would be
+// gated. See "Host's own input never touches the network" under Control
+// model for how the host applies this locally.
 interface ControlChangedMsg extends Envelope {
   type: "control_changed";
   active_writer_id: string;
   active_writer_role: "host" | "viewer";
 }
 
-// The host receives this too — it needs to know when to stop forwarding
-// its own local keystrokes, exactly like a viewer would.
 interface ChatBroadcastMsg extends Envelope {
   type: "chat_message";
   sender_id: string;
@@ -453,7 +485,7 @@ interface ErrorMsg extends Envelope {
 | 4 | Password verified on host, not relay | `auth_request`, `auth_response` — encrypted per [Crypto wire format](#crypto-wire-format), key never touches the relay |
 | 5 | Rate-limited attempts | `auth_result{code:"RATE_LIMITED"}` |
 | 6 | Live output streaming | `output` (host→relay→viewers only) |
-| 7 | Single active writer, instant take-control, host override | `input`, `take_control`, `control_changed`, host lock window |
+| 7 | Single active writer, instant take-control, host override | `input` (viewer→relay), `InputForwardMsg` (relay→host), `take_control`, `control_changed`, host lock window |
 | 8 | Chat panel, never touches PTY | `chat_message` |
 | 9 | Mobile quick-actions as PTY input | Frontend-side translation to `input`, see [Quick actions](#quick-actions--a-frontend-concept-not-a-wire-message) |
 | 10 | Kill switch disconnects viewers, session survives | `kill_switch`, `kicked` |
