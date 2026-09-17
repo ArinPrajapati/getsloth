@@ -1,4 +1,4 @@
-# lazysesh
+# getsloth
 
 ## Problem Statement
 
@@ -220,7 +220,7 @@ Because the viewer is just a browser hitting a link, the exact same v0 build giv
 
 **Positioning decision:** don't lead marketing with "remote access from anywhere" — that's the exact pitch of Tailscale SSH, Teleport, Termius, Mosh, and tmate itself, a mature crowded space with zero differentiation for this product on that axis alone. Use it as a secondary use case and the low-friction onboarding path; the headline stays "watch and collaborate on a live AI agent session, together."
 
-## Naming — decided: `lazysesh`
+## Naming — decided: `getsloth`
 
 Once the headline flipped to solo/mobile/lazy control of your own agent session (see above), naming was re-run to match that feeling, not just the mechanic.
 
@@ -230,10 +230,11 @@ Candidates considered and rejected:
 - `Beam` — rejected, collides with Beam Cloud (a GPU compute platform) in the same developer audience.
 - `Hammock` — strong emotional fit (direct nod to "Hammock Driven Development," a well-loved reference in this exact developer crowd) but bare name taken on both npm and GitHub.
 - `Loaf` — casual, fits the feeling, but bare name taken on both npm and GitHub.
+- `lazysesh` — combined the `sesh` front-runner with the laziness angle, verified clean on npm/GitHub/`.dev`/`.sh`. Superseded: the founder wanted a single word, not a compound, so naming ran one more round.
 
-**Decided: `lazysesh`** — combines the earlier `sesh` front-runner with the laziness/comfort angle the story is actually about, and rides the same warm brand affinity developers already have for "lazy"-prefixed tools in this exact terminal/CLI crowd (LazyVim, lazygit are both beloved precedents, not a negative connotation here).
+**Final round — single word only:** `Sloth`, `Snug`, `Doze`, `Nap`, `Cozy` were all checked; every plain dictionary word for "relaxed/lazy" was already squatted on npm and/or GitHub (a real pattern, not bad luck — short common words are gone on both platforms). Less-common words (`Loll`, `Torpor`, `Drowse`, `Slumber`, `Recess`) were also checked and were taken too.
 
-**Verified clean:** npm (404, free), GitHub (404, free), `lazysesh.dev` and `lazysesh.sh` both returned no response (likely available — confirm at an actual registrar before purchasing, this was only a basic reachability check, not a real WHOIS lookup).
+**Decided: `getsloth`** — `Sloth` is the strongest one-word brand for the story (universally understood laziness symbol, mascot-able), but bare `sloth` is taken on npm and GitHub. `getsloth` is fully clean on both, plus `getsloth.dev` (recommended TLD — idiomatic for a dev CLI tool, Google-registry-enforced HTTPS, matches the npm/GitHub slug exactly). Brand name spoken/written as "Sloth" or "getsloth" interchangeably; the install command, repo, and domain are all `getsloth`.
 
 ## Abuse / safety guardrails — v0 (decided)
 

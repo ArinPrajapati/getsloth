@@ -36,7 +36,7 @@ At minimum, each session log should capture:
 - **What** the agent is doing (the task, in a sentence or two)
 - **Why** — the reasoning or instruction that led to this task
 - **Decisions made** during the session, and why (especially anything not
-  already in `CONSTRAINTS.md` or `docs/ideas/room-engine.md`)
+  already in `CONSTRAINTS.md` or `docs/ideas/getsloth.md`)
 - **Gotchas / surprises** hit along the way — things that would trip up the
   next agent or the founder if undocumented
 - **New ideas or instructions given during the session** by the founder that

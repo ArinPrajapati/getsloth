@@ -7,7 +7,7 @@ a hosted WebSocket relay to a password-gated browser viewer, so the host can
 watch and control their own AI agent session from any device — the headline
 pitch is controlling it from your phone. Stack: Go for the CLI + relay,
 TypeScript + xterm.js for the browser client. Full context in
-`docs/ideas/room-engine.md`; quality bar in `CONSTRAINTS.md`. Ships Friday.
+`docs/ideas/getsloth.md`; quality bar in `CONSTRAINTS.md`. Ships Friday.
 
 ## Architecture Decisions
 
@@ -559,7 +559,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
 - [ ] **Task L1: LICENSE file (AGPL-3.0)**
 
-  **Acceptance criteria:** [ ] Standard AGPL-3.0 text in `LICENSE` at repo root, matching the decision in `docs/ideas/room-engine.md`.
+  **Acceptance criteria:** [ ] Standard AGPL-3.0 text in `LICENSE` at repo root, matching the decision in `docs/ideas/getsloth.md`.
 
   **Dependencies:** None — can happen any time before going public
 
@@ -638,7 +638,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 - [ ] Repo public, relay live, launch post published
 - [ ] This is the traction-test milestone — nothing beyond v0 gets built
       until this signal is in, per the explicit scope discipline in
-      `docs/ideas/room-engine.md`
+      `docs/ideas/getsloth.md`
 
 ## Risks and Mitigations
 

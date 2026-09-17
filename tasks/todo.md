@@ -6,7 +6,12 @@ This file is the checkbox tracker.
 ## Phase 0: Shared Contract
 - [x] T0: Define and document the WebSocket protocol (`docs/protocol.md`)
 
-**Checkpoint:** contract approved by founder before Phase 1 starts. ✅ reviewed (Pi caught a real auth-transport bug, fixed), constants confirmed, agent split assigned — Phase 1 can start.
+**Checkpoint:** contract approved by founder before Phase 1 starts. ✅
+Approved after 3 review rounds (Pi) — each round caught a real gap:
+plaintext password in transit, then a relay-MITM hole in the fix for
+that, then a missing relay→host input-forwarding path. All fixed, plus
+final non-blocking clarifications (reconnect/active-writer interaction,
+token format). Phase 1 can start.
 
 ## Phase 1A: Backend (Go) — CLI + Relay — assigned to Claude
 - [ ] B1: Go module scaffold + tooling wired to CONSTRAINTS.md

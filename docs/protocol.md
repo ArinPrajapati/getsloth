@@ -14,13 +14,22 @@ needs to deviate, this file changes first.
 - v1 draft: initial message set.
 - v2: fixed the relay receiving the plaintext password in transit —
   switched to public-key encryption of the auth attempt.
-- v3 (this version): fixed a second, more serious gap in that same fix —
-  the relay was *delivering* the public key the viewer encrypted to,
-  which let a malicious relay substitute its own key and MITM the whole
-  scheme. The public key now travels in the URL fragment instead, which
-  never reaches any server. Also pins exact crypto wire parameters
-  (curve, encoding, KDF, AEAD, nonce/tag placement, AAD) so two
-  independent implementations don't diverge on details.
+- v3: fixed a second, more serious gap in that same fix — the relay was
+  *delivering* the public key the viewer encrypted to, which let a
+  malicious relay substitute its own key and MITM the whole scheme. The
+  public key now travels in the URL fragment instead, which never
+  reaches any server. Also pins exact crypto wire parameters (curve,
+  encoding, KDF, AEAD, nonce/tag placement, AAD) so two independent
+  implementations don't diverge on details.
+- v4: added the missing relay→host input-forwarding message (the
+  protocol previously never specified how a viewer's approved keystrokes
+  actually reached the PTY), clarified that the host's own input bypasses
+  the network entirely, and fixed a misattached comment and a
+  limits-table field-name mismatch.
+- v5 (this version): approved for implementation. Added reconnect +
+  active-writer interaction semantics and token entropy/encoding —
+  the two remaining non-blocking clarifications from the final review
+  pass.
 
 ## Design rules
 
@@ -182,7 +191,11 @@ Viewer (already has host's                Relay                          Host CL
 6. **On `ok:true`, the relay generates a random session token and a
    `connection_id` for this viewer**, records both against the
    connection, and sends them in `auth_result`. The host never generates
-   or sees this token.
+   or sees this token. **Token format:** 32 bytes from a CSPRNG,
+   standard base64-encoded (same convention as the rest of the wire
+   fields — it only ever appears in JSON messages, never a URL, so
+   there's no reason to switch encodings the way the share-link key
+   does).
 7. On `ok:false`, relay increments the `(session_id, remote_address)`
    failure counter. At `RATE_LIMIT_MAX_ATTEMPTS` (5) further attempts get
    `RATE_LIMITED` without contacting the host until
@@ -252,6 +265,20 @@ invalidated by a kill switch, within `RECONNECT_WINDOW_MS` = 30000) the
 relay responds `auth_result{ok:true, connection_id}` immediately — no
 host round-trip, since the relay itself is the token's issuer and
 authority.
+
+**Active-writer status does not survive a disconnect, regardless of the
+reconnect window.** If the current active writer's connection drops for
+any reason, the relay immediately reassigns the active writer to the
+**host** and broadcasts `control_changed` right away — it does not wait
+out `RECONNECT_WINDOW_MS` on the chance they come back. This keeps the
+system consistent with the host always being the fallback authority
+(the same principle behind the host lock window in
+[Control model](#control-model)) and avoids a confusing state where
+nobody can type while a disconnected client is still nominally "in
+control." If the disconnected viewer reconnects via `resume` within the
+window, they rejoin as an authenticated participant like anyone else —
+they do **not** automatically regain control and must send `take_control`
+again if they want it back.
 
 ## Limits
 
