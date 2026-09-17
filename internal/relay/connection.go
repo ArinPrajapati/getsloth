@@ -16,12 +16,24 @@ import (
 // (the reconnecting connection adopts the original connection_id the
 // token was issued under, see Session.handleResume), and authenticated
 // flips true once auth or resume succeeds.
+//
+// writeMu is separate from mu: many different goroutines write to a
+// given Connection concurrently - its own read-loop goroutine (sending
+// itself an error/auth_result), and any other connection's read-loop
+// goroutine broadcasting to it (output, control_changed, session_ended,
+// kicked, ...). gorilla/websocket explicitly does not support
+// concurrent callers of its Write* methods on one connection, so every
+// writeJSON call must serialize through this lock. (WriteControl and
+// Close, used by closeWithCode, are documented by gorilla as safe to
+// call concurrently with everything else, so they don't need it.)
 type Connection struct {
 	ws *websocket.Conn
 
 	mu            sync.Mutex
 	id            string
 	authenticated bool
+
+	writeMu sync.Mutex
 }
 
 func newConnection(ws *websocket.Conn, id string) *Connection {
@@ -53,6 +65,8 @@ func (c *Connection) setAuthenticated(v bool) {
 }
 
 func (c *Connection) writeJSON(v any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	return c.ws.WriteJSON(v)
 }
 

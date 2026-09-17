@@ -2,7 +2,6 @@ package relay
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -37,44 +36,14 @@ func readMsg(t *testing.T, conn *websocket.Conn, v any) {
 	}
 }
 
-// simulateHostAuthResponder answers every auth_request the host
-// connection receives with a fixed verdict. Relay-level tests don't need
-// real cryptography for this - that's internal/hostauth's job, tested
-// independently in internal/hostauth/hostauth_test.go. These tests only
-// need to prove the relay routes and gates correctly given whatever
-// verdict the host returns.
-func simulateHostAuthResponder(t *testing.T, host *websocket.Conn, ok bool) {
-	t.Helper()
-	go func() {
-		for {
-			_, raw, err := host.ReadMessage()
-			if err != nil {
-				return
-			}
-			var env protocol.Envelope
-			if err := json.Unmarshal(raw, &env); err != nil {
-				continue
-			}
-			if env.Type != "auth_request" {
-				continue
-			}
-			var req protocol.AuthRequestMsg
-			if err := json.Unmarshal(raw, &req); err != nil {
-				continue
-			}
-			_ = host.WriteJSON(protocol.AuthResponseMsg{
-				Envelope:  protocol.NewEnvelope("auth_response"),
-				RequestID: req.RequestID,
-				OK:        ok,
-			})
-		}
-	}()
-}
-
 // authenticateViewer drives a full auth round-trip and returns the
 // issued token. The auth payload content is irrelevant at the relay
-// level (the relay forwards it opaquely); simulateHostAuthResponder must
-// already be running on host with ok=true for this to succeed.
+// level (the relay forwards it opaquely); a hostStub must already be
+// running on host with ok=true for this to succeed. Relay-level tests
+// don't need real cryptography here - that's internal/hostauth's job,
+// tested independently in internal/hostauth/hostauth_test.go. These
+// tests only need to prove the relay routes and gates correctly given
+// whatever verdict the host returns.
 func authenticateViewer(t *testing.T, viewer *websocket.Conn) protocol.AuthResultMsg {
 	t.Helper()
 	if err := viewer.WriteJSON(protocol.AuthMsg{
@@ -209,13 +178,13 @@ func TestOutput_ReachesViewer_NotHost(t *testing.T) {
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 
-	simulateHostAuthResponder(t, host, true)
+	hs := newHostStub(t, host, true)
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
 	if result := authenticateViewer(t, viewer); !result.OK {
 		t.Fatalf("authenticateViewer: ok=false, want true")
 	}
 
-	if err := host.WriteJSON(protocol.OutputMsg{
+	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
 		DataBase64: base64.StdEncoding.EncodeToString([]byte("hello")),
 	}); err != nil {
@@ -234,12 +203,8 @@ func TestOutput_ReachesViewer_NotHost(t *testing.T) {
 	}
 
 	// The host must NOT receive its own output echoed back - it already
-	// has this locally from its own PTY. A short read with a deadline
-	// confirms nothing arrives.
-	_ = host.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
-	if _, _, err := host.ReadMessage(); err == nil {
-		t.Error("host received a message back, expected none (output must not echo to host)")
-	}
+	// has this locally from its own PTY.
+	hs.expectNothing(t)
 }
 
 func TestOutput_PreservesOrderAcrossManyRapidChunks(t *testing.T) {
@@ -250,7 +215,7 @@ func TestOutput_PreservesOrderAcrossManyRapidChunks(t *testing.T) {
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 
-	simulateHostAuthResponder(t, host, true)
+	hs := newHostStub(t, host, true)
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
 	if result := authenticateViewer(t, viewer); !result.OK {
 		t.Fatalf("authenticateViewer: ok=false, want true")
@@ -262,7 +227,7 @@ func TestOutput_PreservesOrderAcrossManyRapidChunks(t *testing.T) {
 			Envelope:   protocol.NewEnvelope("output"),
 			DataBase64: base64.StdEncoding.EncodeToString([]byte{byte(i)}),
 		}
-		if err := host.WriteJSON(msg); err != nil {
+		if err := hs.WriteJSON(msg); err != nil {
 			t.Fatalf("host WriteJSON #%d: %v", i, err)
 		}
 	}

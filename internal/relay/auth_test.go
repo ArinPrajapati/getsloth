@@ -15,7 +15,7 @@ func TestAuth_CorrectPassword_GrantsTokenAndUnlocksOutput(t *testing.T) {
 	host := dial(t, base+"/ws/host")
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
-	simulateHostAuthResponder(t, host, true)
+	hs := newHostStub(t, host, true)
 
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
 	result := authenticateViewer(t, viewer)
@@ -30,7 +30,7 @@ func TestAuth_CorrectPassword_GrantsTokenAndUnlocksOutput(t *testing.T) {
 		t.Error("no connection_id returned on successful auth")
 	}
 
-	if err := host.WriteJSON(protocol.OutputMsg{
+	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
 		DataBase64: base64.StdEncoding.EncodeToString([]byte("now visible")),
 	}); err != nil {
@@ -51,7 +51,7 @@ func TestAuth_WrongPassword_Rejected_OutputStaysGated(t *testing.T) {
 	host := dial(t, base+"/ws/host")
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
-	simulateHostAuthResponder(t, host, false)
+	hs := newHostStub(t, host, false)
 
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
 	result := authenticateViewer(t, viewer)
@@ -67,7 +67,7 @@ func TestAuth_WrongPassword_Rejected_OutputStaysGated(t *testing.T) {
 	}
 
 	// Output still must not reach this viewer.
-	if err := host.WriteJSON(protocol.OutputMsg{
+	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
 		DataBase64: base64.StdEncoding.EncodeToString([]byte("should not arrive")),
 	}); err != nil {
@@ -103,7 +103,7 @@ func TestAuth_UnauthenticatedMessage_GetsUnauthorizedNotClosed(t *testing.T) {
 
 	// Per docs/protocol.md, UNAUTHORIZED must not close the connection -
 	// confirm the viewer can still successfully authenticate afterward.
-	simulateHostAuthResponder(t, host, true)
+	newHostStub(t, host, true)
 	if result := authenticateViewer(t, viewer); !result.OK {
 		t.Error("could not authenticate after an earlier UNAUTHORIZED - connection may have been incorrectly closed")
 	}
@@ -116,7 +116,7 @@ func TestAuth_RateLimitedAfterMaxFailures(t *testing.T) {
 	host := dial(t, base+"/ws/host")
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
-	simulateHostAuthResponder(t, host, false) // every attempt fails
+	newHostStub(t, host, false) // every attempt fails
 
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
 
@@ -147,7 +147,7 @@ func TestResume_ValidToken_SkipsHostRoundTrip(t *testing.T) {
 	host := dial(t, base+"/ws/host")
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
-	simulateHostAuthResponder(t, host, true)
+	hs := newHostStub(t, host, true)
 
 	viewer1 := dial(t, base+"/ws/viewer/"+created.SessionID)
 	firstAuth := authenticateViewer(t, viewer1)
@@ -176,7 +176,7 @@ func TestResume_ValidToken_SkipsHostRoundTrip(t *testing.T) {
 	}
 
 	// Output must reach the resumed connection without any further auth.
-	if err := host.WriteJSON(protocol.OutputMsg{
+	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
 		DataBase64: base64.StdEncoding.EncodeToString([]byte("resumed")),
 	}); err != nil {

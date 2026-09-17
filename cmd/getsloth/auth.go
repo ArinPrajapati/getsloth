@@ -8,7 +8,6 @@ import (
 
 	"github.com/arinprajapati/getsloth/internal/hostauth"
 	"github.com/arinprajapati/getsloth/internal/protocol"
-	"github.com/gorilla/websocket"
 )
 
 // runHostMessageLoop reads every message the relay sends to the host
@@ -25,7 +24,7 @@ import (
 //
 // Blocks on ptmxCh until B2's run() has spawned the PTY (via
 // onPTYReady), then runs until the connection closes.
-func runHostMessageLoop(ws *websocket.Conn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File) {
+func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File) {
 	ptmx := <-ptmxCh
 
 	for {
