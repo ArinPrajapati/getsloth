@@ -1,0 +1,58 @@
+# getsloth v0 — Task List
+
+Full detail (acceptance criteria, verification, files) in `tasks/plan.md`.
+This file is the checkbox tracker.
+
+## Phase 0: Shared Contract
+- [x] T0: Define and document the WebSocket protocol (`docs/protocol.md`)
+
+**Checkpoint:** contract approved by founder before Phase 1 starts. ⏳ awaiting review.
+
+## Phase 1A: Backend (Go) — CLI + Relay
+- [ ] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
+- [ ] B2: PTY wrapping — `getsloth <command>` works standalone
+- [ ] B3: Relay server skeleton — sessions, host + viewer connect
+- [ ] B4: Live output streaming (host → relay → viewer)
+
+**Checkpoint:** backend can stream, no auth/control yet.
+
+- [ ] B5: Password auth — local verification + rate limiting
+- [ ] B6: Control handoff — single active writer + host override
+- [ ] B7: Kill switch
+- [ ] B8: Session teardown + reconnect resilience
+
+**Checkpoint:** Backend feature-complete.
+
+## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer
+- [ ] F1: Project scaffold + tooling wired to CONSTRAINTS.md
+- [ ] F2: WebSocket client + xterm.js live render
+- [ ] F3: Password gate UI
+- [ ] F4: Take-control button + presence/control indicator
+- [ ] F5: Chat panel
+- [ ] F6: Mobile quick-action overlay (yes/no/continue + text)
+- [ ] F7: Kicked / session-ended states
+- [ ] F8: Responsive + accessibility + performance pass
+
+**Checkpoint:** Frontend feature-complete.
+
+## Phase 2: Integration
+- [ ] I1: Wire Frontend against real Backend end-to-end
+- [ ] I2: Manual multi-device verification (phone + laptop, real network) — human-only task
+
+**Checkpoint:** v0 works end-to-end on real devices, founder sign-off.
+
+## Phase 3: Launch Prep
+- [ ] L1: LICENSE file (AGPL-3.0)
+- [ ] L2: README
+- [ ] L3: Deploy the hosted relay
+- [ ] L4: Demo capture (phone, in bed, matching the actual pitch)
+- [ ] L5: Go public — push repo public, publish launch post
+
+**Checkpoint:** Shipped. Traction-test milestone — nothing beyond v0 until
+this signal is in.
+
+## Open Questions (need founder input)
+- Which agent (Claude or Pi) takes Backend vs Frontend
+- Reconnect window (placeholder: 30s)
+- Rate-limit threshold (placeholder: 5 attempts)
+- Relay hosting provider for L3 (not yet decided)
