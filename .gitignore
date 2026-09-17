@@ -2,3 +2,6 @@
 # See agent-session/README.md for the convention. README itself stays tracked.
 agent-session/*
 !agent-session/README.md
+
+# Git worktrees (per-agent isolated working directories)
+.worktrees/
