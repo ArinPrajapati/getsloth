@@ -17,7 +17,7 @@ func TestKillSwitch_DisconnectsViewers_SessionStaysAlive(t *testing.T) {
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	viewer := authedViewer(t, base, created.SessionID)
+	viewer := authedViewer(t, base, created.SessionID, hs)
 
 	if err := hs.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")}); err != nil {
 		t.Fatalf("sending kill_switch: %v", err)
@@ -43,7 +43,7 @@ func TestKillSwitch_DisconnectsViewers_SessionStaysAlive(t *testing.T) {
 	// The session itself must survive: a fresh viewer can still connect
 	// and authenticate afterward (host's key/password logic is
 	// untouched - the relay doesn't hold any of that state to reset).
-	viewer2 := authedViewer(t, base, created.SessionID)
+	viewer2 := authedViewer(t, base, created.SessionID, hs)
 	if viewer2 == nil {
 		t.Fatal("could not connect a new viewer after kill_switch - session did not survive")
 	}
@@ -58,16 +58,22 @@ func TestKillSwitch_HostConnectionUnaffected(t *testing.T) {
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	_ = authedViewer(t, base, created.SessionID)
+	_ = authedViewer(t, base, created.SessionID, hs)
 
 	if err := hs.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")}); err != nil {
 		t.Fatalf("sending kill_switch: %v", err)
 	}
 
-	// The host shouldn't receive a kicked message about itself, and its
-	// connection must stay open and usable - confirmed by successfully
-	// sending another message afterward (output) and seeing no error.
-	hs.expectNothing(t)
+	// The host shouldn't receive a kicked message about itself (that's
+	// viewer-only), but it DOES receive a presence update reflecting
+	// the now-empty viewer roster (see handleKillSwitch) - drain that,
+	// then confirm the connection stays open and usable by sending
+	// another message afterward and seeing no error.
+	var presence protocol.PresenceMsg
+	hs.next(t, &presence)
+	if len(presence.Connections) != 1 {
+		t.Errorf("presence after kill_switch has %d connections, want 1 (host only): %+v", len(presence.Connections), presence.Connections)
+	}
 	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
 		DataBase64: "c3RpbGwgYWxpdmU=", // "still alive"

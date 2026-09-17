@@ -195,6 +195,44 @@ type EndSessionMsg struct {
 	Envelope
 }
 
+// ChatMsg is a chat message, sent by either the host or a viewer to the
+// relay. Never applied to the PTY under any circumstance - a
+// structurally distinct message type from InputMsg specifically so
+// there's no path from "chat" to "keystrokes."
+type ChatMsg struct {
+	Envelope
+	Text string `json:"text"`
+}
+
+// ChatBroadcastMsg is the relay's fan-out of a ChatMsg to every
+// connection (host and every authenticated viewer), tagged with who
+// sent it.
+type ChatBroadcastMsg struct {
+	Envelope
+	SenderID          string `json:"sender_id"`
+	SenderRole        string `json:"sender_role"`
+	SenderDisplayName string `json:"sender_display_name,omitempty"`
+	Text              string `json:"text"`
+}
+
+// PresenceConnectionInfo describes one connection currently in a
+// session's roster.
+type PresenceConnectionInfo struct {
+	ID             string `json:"id"`
+	Role           string `json:"role"`
+	DisplayName    string `json:"display_name,omitempty"`
+	IsActiveWriter bool   `json:"is_active_writer"`
+}
+
+// PresenceMsg is broadcast to every connection (host and every
+// authenticated viewer) whenever the session's roster or active-writer
+// state changes - a viewer authenticates or resumes, disconnects, the
+// kill switch fires, or control changes hands.
+type PresenceMsg struct {
+	Envelope
+	Connections []PresenceConnectionInfo `json:"connections"`
+}
+
 // Custom WebSocket close codes, application range per RFC 6455. See
 // docs/protocol.md's "Socket lifecycle" section.
 const (

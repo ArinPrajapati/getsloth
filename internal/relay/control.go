@@ -56,6 +56,9 @@ func (s *Server) handleTakeControl(session *Session, conn *Connection) {
 	for _, v := range viewers {
 		_ = v.writeJSON(msg)
 	}
+	// presence's per-connection is_active_writer flag would otherwise
+	// go stale until the next unrelated roster change.
+	s.broadcastPresence(session)
 }
 
 // handleInput forwards a viewer's input to the host, but only if conn is

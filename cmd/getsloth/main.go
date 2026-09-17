@@ -72,7 +72,7 @@ func main() {
 		ptmxCh := make(chan *os.File, 1)
 		onPTYReady = func(f *os.File) { ptmxCh <- f }
 
-		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
+		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
 
 		// Host-triggered actions per docs/protocol.md: reclaiming

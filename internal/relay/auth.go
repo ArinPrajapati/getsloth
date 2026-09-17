@@ -37,8 +37,10 @@ func (s *Server) handleViewerMessage(session *Session, conn *Connection, remoteA
 			s.handleTakeControl(session, conn)
 		case "input":
 			s.handleInput(session, conn, raw)
+		case "chat_message":
+			s.handleChatMessage(session, conn, raw)
 		}
-		// chat_message, kill_switch arrive in later tasks.
+		// kill_switch is host-only, dispatched from handleHostMessage.
 	}
 }
 
@@ -75,6 +77,12 @@ func (s *Server) handleAuthAttempt(session *Session, conn *Connection, remoteAdd
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		s.rateLimiter.release(session.ID, remoteAddr)
 		return
+	}
+	// Set regardless of whether auth ultimately succeeds - harmless if
+	// it fails, since a never-authenticated connection's display name
+	// is never broadcast to anyone.
+	if msg.DisplayName != "" {
+		conn.setDisplayName(msg.DisplayName)
 	}
 
 	requestID, err := newRandomID()
@@ -162,6 +170,7 @@ func (s *Server) handleAuthResponse(session *Session, msg protocol.AuthResponseM
 		Token:        token,
 		ConnectionID: pending.viewerID,
 	})
+	s.broadcastPresence(session)
 }
 
 // handleResume validates a viewer's resume token and, if valid, makes
@@ -200,4 +209,5 @@ func (s *Server) handleResume(session *Session, conn *Connection, raw []byte) {
 		Token:        msg.Token,
 		ConnectionID: ownerID,
 	})
+	s.broadcastPresence(session)
 }

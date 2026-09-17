@@ -18,7 +18,7 @@ func TestEndSession_ExplicitCleanEnd_UsesProcessExitedReason(t *testing.T) {
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	viewer := authedViewer(t, base, created.SessionID)
+	viewer := authedViewer(t, base, created.SessionID, hs)
 
 	if err := hs.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")}); err != nil {
 		t.Fatalf("sending end_session: %v", err)

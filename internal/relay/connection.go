@@ -29,15 +29,37 @@ import (
 type Connection struct {
 	ws *websocket.Conn
 
+	role string // "host" or "viewer", fixed at creation, never changes
+
 	mu            sync.Mutex
 	id            string
 	authenticated bool
+	displayName   string
 
 	writeMu sync.Mutex
 }
 
-func newConnection(ws *websocket.Conn, id string) *Connection {
-	return &Connection{ws: ws, id: id}
+func newConnection(ws *websocket.Conn, id, role string) *Connection {
+	return &Connection{ws: ws, id: id, role: role}
+}
+
+// Role returns "host" or "viewer". Unlike id, this never changes for
+// the lifetime of the connection (even across a resume, which only
+// re-keys id).
+func (c *Connection) Role() string {
+	return c.role
+}
+
+func (c *Connection) setDisplayName(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.displayName = name
+}
+
+func (c *Connection) displayNameOrEmpty() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.displayName
 }
 
 func (c *Connection) ID() string {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"io"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -61,7 +62,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 	active := &atomic.Bool{}
 	active.Store(true)
 	ptmxCh := make(chan *os.File, 1)
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard)
 
 	// Run `cat` in a real PTY via run() itself - exercising the actual
 	// production PTY-spawn path, with onPTYReady feeding this same
@@ -100,6 +101,13 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 	}
 	if !authResult.OK {
 		t.Fatalf("auth failed, can't test control handoff")
+	}
+	// A successful auth also triggers a presence broadcast (see
+	// internal/relay/presence.go) - drain it before the control_changed
+	// this test actually checks.
+	var presence protocol.PresenceMsg
+	if err := viewer.ReadJSON(&presence); err != nil {
+		t.Fatalf("ReadJSON presence: %v", err)
 	}
 
 	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {

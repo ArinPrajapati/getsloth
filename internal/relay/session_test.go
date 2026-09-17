@@ -183,6 +183,12 @@ func TestOutput_ReachesViewer_NotHost(t *testing.T) {
 	if result := authenticateViewer(t, viewer); !result.OK {
 		t.Fatalf("authenticateViewer: ok=false, want true")
 	}
+	// Drain the auth-triggered presence broadcast on both sides first,
+	// so the later expectNothing check isn't racing against it.
+	var hostPresence protocol.PresenceMsg
+	hs.next(t, &hostPresence)
+	var viewerPresence protocol.PresenceMsg
+	readMsg(t, viewer, &viewerPresence)
 
 	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
@@ -220,6 +226,13 @@ func TestOutput_PreservesOrderAcrossManyRapidChunks(t *testing.T) {
 	if result := authenticateViewer(t, viewer); !result.OK {
 		t.Fatalf("authenticateViewer: ok=false, want true")
 	}
+	// Drain the auth-triggered presence broadcast on both sides before
+	// the ordered-chunk assertions below, which assume the very first
+	// thing read is chunk #0.
+	var hostPresence protocol.PresenceMsg
+	hs.next(t, &hostPresence)
+	var viewerPresence protocol.PresenceMsg
+	readMsg(t, viewer, &viewerPresence)
 
 	const n = 200
 	for i := 0; i < n; i++ {

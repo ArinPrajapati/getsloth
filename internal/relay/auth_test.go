@@ -31,6 +31,14 @@ func TestAuth_CorrectPassword_GrantsTokenAndUnlocksOutput(t *testing.T) {
 		t.Error("no connection_id returned on successful auth")
 	}
 
+	// A successful auth also triggers a presence broadcast on both
+	// sides (see internal/relay/presence.go) - drain it before the
+	// output exchange this test actually checks.
+	var hostPresence protocol.PresenceMsg
+	hs.next(t, &hostPresence)
+	var viewerPresence protocol.PresenceMsg
+	readMsg(t, viewer, &viewerPresence)
+
 	if err := hs.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
 		DataBase64: base64.StdEncoding.EncodeToString([]byte("now visible")),
@@ -256,8 +264,12 @@ func TestResume_ValidToken_SkipsHostRoundTrip(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("host WriteJSON: %v", err)
 	}
+	// viewer1's disconnect (above) can trigger its own presence
+	// broadcast at an unpredictable time relative to this read, since
+	// the server detects the close asynchronously - skip past it rather
+	// than assume a fixed message count.
 	var got protocol.OutputMsg
-	readMsg(t, viewer2, &got)
+	readMsgSkippingPresence(t, viewer2, &got)
 	data, _ := base64.StdEncoding.DecodeString(got.DataBase64)
 	if string(data) != "resumed" {
 		t.Errorf("resumed viewer received %q, want %q", data, "resumed")

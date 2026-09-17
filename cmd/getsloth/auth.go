@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"sync/atomic"
 
@@ -21,10 +23,14 @@ import (
 //   - input is a viewer's approved keystrokes, already confirmed by the
 //     relay to be from the current active writer - written to the PTY
 //     directly, no further gating needed here.
+//   - chat_message is printed to chatOut - without this, a viewer's
+//     "add context without taking control" message (the whole reason
+//     chat exists, per docs/ideas/getsloth.md) would silently vanish:
+//     the host sitting at their real terminal would never see it.
 //
 // Blocks on ptmxCh until B2's run() has spawned the PTY (via
 // onPTYReady), then runs until the connection closes.
-func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File) {
+func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File, chatOut io.Writer) {
 	ptmx := <-ptmxCh
 
 	for {
@@ -68,6 +74,21 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 				continue
 			}
 			_, _ = ptmx.Write(data)
+
+		case "chat_message":
+			var msg protocol.ChatBroadcastMsg
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				continue
+			}
+			sender := msg.SenderDisplayName
+			if sender == "" {
+				if msg.SenderRole == "host" {
+					sender = "you"
+				} else {
+					sender = "viewer"
+				}
+			}
+			_, _ = fmt.Fprintf(chatOut, "getsloth: [chat] %s: %s\n", sender, msg.Text)
 		}
 	}
 }

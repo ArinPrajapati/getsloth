@@ -80,6 +80,64 @@ func (hs *hostStub) next(t *testing.T, v any) {
 	}
 }
 
+// nextSkippingPresence is like next, but discards any "presence"
+// messages first. Presence broadcasts can be triggered asynchronously
+// (e.g. a connection closing) and interleave unpredictably with
+// whatever a test is actually asserting on - tests that care about
+// presence itself use next/readMsg directly against a specific
+// expected sequence; tests that don't want to hand-count every
+// presence fan-out use this instead.
+func (hs *hostStub) nextSkippingPresence(t *testing.T, v any) {
+	t.Helper()
+	for {
+		select {
+		case raw, ok := <-hs.other:
+			if !ok {
+				t.Fatal("host connection closed while waiting for a message")
+			}
+			var env protocol.Envelope
+			if err := json.Unmarshal(raw, &env); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if env.Type == "presence" {
+				continue
+			}
+			if err := json.Unmarshal(raw, v); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			return
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for a non-presence message on host")
+		}
+	}
+}
+
+// readMsgSkippingPresence is nextSkippingPresence's counterpart for a
+// raw viewer *websocket.Conn - reads raw frames (not via ReadJSON,
+// which would consume a frame before its type could be checked) so a
+// "presence" frame can be discarded and the next one decoded into v.
+func readMsgSkippingPresence(t *testing.T, conn *websocket.Conn, v any) {
+	t.Helper()
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("ReadMessage: %v", err)
+		}
+		var env protocol.Envelope
+		if err := json.Unmarshal(raw, &env); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if env.Type == "presence" {
+			continue
+		}
+		if err := json.Unmarshal(raw, v); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return
+	}
+}
+
 // expectNothing fails if a message arrives on host within a short
 // window - used to prove something was correctly NOT forwarded/sent.
 func (hs *hostStub) expectNothing(t *testing.T) {
@@ -94,12 +152,22 @@ func (hs *hostStub) expectNothing(t *testing.T) {
 	}
 }
 
-func authedViewer(t *testing.T, base, sessionID string) *websocket.Conn {
+// authedViewer connects and authenticates a viewer, then drains the
+// presence broadcast a successful auth triggers on both sides (see
+// internal/relay/presence.go) - callers want a ready-to-use pair of
+// connections sitting at their next "real" message, not to manually
+// account for presence every time. hs must be the host stub already
+// running for this session (every current caller has one).
+func authedViewer(t *testing.T, base, sessionID string, hs *hostStub) *websocket.Conn {
 	t.Helper()
 	viewer := dial(t, base+"/ws/viewer/"+sessionID)
 	if result := authenticateViewer(t, viewer); !result.OK {
 		t.Fatalf("authenticateViewer: ok=false, want true")
 	}
+	var viewerPresence protocol.PresenceMsg
+	readMsg(t, viewer, &viewerPresence)
+	var hostPresence protocol.PresenceMsg
+	hs.next(t, &hostPresence)
 	return viewer
 }
 
@@ -112,7 +180,7 @@ func TestTakeControl_ViewerBecomesActiveWriter_AllGetControlChanged(t *testing.T
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	viewer := authedViewer(t, base, created.SessionID)
+	viewer := authedViewer(t, base, created.SessionID, hs)
 
 	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
 		t.Fatalf("sending take_control: %v", err)
@@ -145,7 +213,7 @@ func TestInput_OnlyAppliedFromActiveWriter(t *testing.T) {
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	viewer := authedViewer(t, base, created.SessionID)
+	viewer := authedViewer(t, base, created.SessionID, hs)
 
 	// Viewer is not the active writer yet (host is, by default) - its
 	// input must be dropped, never forwarded to the host.
@@ -168,7 +236,7 @@ func TestInput_ForwardedToHost_WhenSenderIsActiveWriter(t *testing.T) {
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	viewer := authedViewer(t, base, created.SessionID)
+	viewer := authedViewer(t, base, created.SessionID, hs)
 
 	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
 		t.Fatalf("sending take_control: %v", err)
@@ -185,8 +253,10 @@ func TestInput_ForwardedToHost_WhenSenderIsActiveWriter(t *testing.T) {
 		t.Fatalf("sending input: %v", err)
 	}
 
+	// take_control's own presence broadcast (see handleTakeControl) is
+	// still queued ahead of the input forward at this point - skip it.
 	var fwd protocol.InputForwardMsg
-	hs.next(t, &fwd)
+	hs.nextSkippingPresence(t, &fwd)
 	data, err := base64.StdEncoding.DecodeString(fwd.DataBase64)
 	if err != nil {
 		t.Fatalf("decoding forwarded input: %v", err)
@@ -208,31 +278,40 @@ func TestTakeControl_HostReclaim_LocksOutViewerBriefly(t *testing.T) {
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
 
-	viewer := authedViewer(t, base, created.SessionID)
+	viewer := authedViewer(t, base, created.SessionID, hs)
 
-	// Viewer takes control first.
+	// Viewer takes control first. Each take_control also triggers its
+	// own presence broadcast (see handleTakeControl) - use the
+	// presence-skipping helpers throughout this test rather than
+	// hand-count exactly how many presence messages queue up on each
+	// side at each step.
 	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
 		t.Fatalf("viewer take_control: %v", err)
 	}
 	var discard protocol.ControlChangedMsg
-	hs.next(t, &discard)
-	readMsg(t, viewer, &discard)
+	hs.nextSkippingPresence(t, &discard)
+	readMsgSkippingPresence(t, viewer, &discard)
 
 	// Host reclaims. The relay broadcasts control_changed to everyone,
-	// including the host itself (unlike output, which excludes it) - so
-	// hs.other gets this too and must be drained before the later
-	// expectNothing check, or it would be mistaken for a spurious
-	// broadcast from the rejected attempt below.
+	// including the host itself (unlike output, which excludes it).
 	if err := hs.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
 		t.Fatalf("host take_control: %v", err)
 	}
 	var hostOwnEcho protocol.ControlChangedMsg
-	hs.next(t, &hostOwnEcho)
+	hs.nextSkippingPresence(t, &hostOwnEcho)
 	var afterHostReclaim protocol.ControlChangedMsg
-	readMsg(t, viewer, &afterHostReclaim)
+	readMsgSkippingPresence(t, viewer, &afterHostReclaim)
 	if afterHostReclaim.ActiveWriterRole != "host" {
 		t.Fatalf("after host reclaim, role = %q, want host", afterHostReclaim.ActiveWriterRole)
 	}
+	// The reclaim's own presence broadcast arrives AFTER its
+	// control_changed (see handleTakeControl) - nextSkippingPresence
+	// above only skips presence messages queued BEFORE the target it
+	// returns, not ones that arrive after, so this one is still queued
+	// on host and must be drained explicitly before the later
+	// expectNothing check.
+	var hostReclaimPresence protocol.PresenceMsg
+	hs.next(t, &hostReclaimPresence)
 
 	// Viewer immediately tries to take it back - must be rejected while
 	// inside HostLockWindow.
@@ -240,12 +319,13 @@ func TestTakeControl_HostReclaim_LocksOutViewerBriefly(t *testing.T) {
 		t.Fatalf("viewer take_control (should be locked out): %v", err)
 	}
 	var errMsg protocol.ErrorMsg
-	readMsg(t, viewer, &errMsg)
+	readMsgSkippingPresence(t, viewer, &errMsg)
 	if errMsg.Code != protocol.ErrNotActiveWriter {
 		t.Errorf("code = %q, want %q", errMsg.Code, protocol.ErrNotActiveWriter)
 	}
 
-	// Host must not have received a spurious control_changed from the
+	// Host must not have received a spurious control_changed (or
+	// presence - a rejected take_control changes nothing) from the
 	// rejected attempt.
 	hs.expectNothing(t)
 }

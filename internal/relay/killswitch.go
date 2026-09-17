@@ -38,4 +38,9 @@ func (s *Server) handleKillSwitch(session *Session) {
 		})
 		v.closeWithCode(protocol.CloseKicked, "kicked")
 	}
+
+	// session.viewers is already empty at this point, so this only
+	// reaches the host - correct, since the just-kicked viewers no
+	// longer have a connection to receive it on.
+	s.broadcastPresence(session)
 }

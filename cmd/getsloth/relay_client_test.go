@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -48,7 +49,7 @@ func TestRelayOutputWriter_ChunksLargeWritesAndReachesViewer(t *testing.T) {
 	}
 	const password = "chunk-test-password"
 	active, ptmxCh := dummyControlState()
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {

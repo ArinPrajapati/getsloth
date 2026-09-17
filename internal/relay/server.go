@@ -46,7 +46,7 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	conn := newConnection(ws, "host")
+	conn := newConnection(ws, "host", "host")
 
 	session, err := s.registry.Create()
 	if err != nil {
@@ -68,8 +68,7 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Block until the host disconnects, dispatching each message as it
-	// arrives. take_control, kill_switch, chat_message, end_session
-	// arrive in later tasks.
+	// arrives.
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
@@ -119,6 +118,13 @@ func (s *Server) handleHostMessage(session *Session, raw []byte) {
 		s.handleKillSwitch(session)
 	case "end_session":
 		session.teardown(protocol.ReasonProcessExited)
+	case "chat_message":
+		session.mu.Lock()
+		host := session.host
+		session.mu.Unlock()
+		if host != nil {
+			s.handleChatMessage(session, host, raw)
+		}
 	}
 }
 
@@ -133,7 +139,7 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !ok {
-		conn := newConnection(ws, "")
+		conn := newConnection(ws, "", "viewer")
 		_ = conn.writeJSON(protocol.ErrorMsg{
 			Envelope: protocol.NewEnvelope("error"),
 			Code:     protocol.ErrSessionNotFound,
@@ -145,10 +151,10 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 
 	viewerID, err := newRandomID()
 	if err != nil {
-		newConnection(ws, "").closeWithCode(protocol.CloseBadRequest, "internal error")
+		newConnection(ws, "", "viewer").closeWithCode(protocol.CloseBadRequest, "internal error")
 		return
 	}
-	conn := newConnection(ws, viewerID)
+	conn := newConnection(ws, viewerID, "viewer")
 
 	if !session.addViewer(viewerID, conn) {
 		_ = conn.writeJSON(protocol.ErrorMsg{
@@ -170,4 +176,7 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.removeViewer(conn.ID())
+	// A no-op broadcast if conn was never authenticated (it was already
+	// excluded from every presence view), harmless either way.
+	s.broadcastPresence(session)
 }
