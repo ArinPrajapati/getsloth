@@ -1,0 +1,4 @@
+# Agent working-session logs — private working notes, not for the public repo.
+# See agent-session/README.md for the convention. README itself stays tracked.
+agent-session/*
+!agent-session/README.md
