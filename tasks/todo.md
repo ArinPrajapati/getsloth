@@ -16,7 +16,7 @@ token format). Phase 1 can start.
 ## Phase 1A: Backend (Go) — CLI + Relay — assigned to Claude
 - [x] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
 - [x] B2: PTY wrapping — `getsloth <command>` works standalone
-- [ ] B3: Relay server skeleton — sessions, host + viewer connect
+- [x] B3: Relay server skeleton — sessions, host + viewer connect
 - [ ] B4: Live output streaming (host → relay → viewer)
 
 **Checkpoint:** backend can stream, no auth/control yet.
