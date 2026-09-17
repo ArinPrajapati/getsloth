@@ -34,7 +34,10 @@ token format). Phase 1 can start.
 - [x] F3: Password gate UI
 - [x] F4: Take-control button + presence/control indicator
 - [x] F5: Chat panel
-- [ ] F6: Mobile quick-action overlay (yes/no/continue + text)
+- [x] F6: Mobile quick-action overlay (yes/no/continue + text) — logic/tests
+      by Pi, styling/layout completed by Claude. Real-phone manual check
+      (plan.md's explicit acceptance criterion) still outstanding — human
+      task, not agent-verifiable.
 - [ ] F7: Kicked / session-ended states
 - [ ] F8: Responsive + accessibility + performance pass
 

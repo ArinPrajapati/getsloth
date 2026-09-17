@@ -99,3 +99,160 @@ h1 {
     padding: 5rem 2rem;
   }
 }
+
+/* Auth gate, control, chat and quick-action cards render as siblings of
+   .app-shell directly under #app (see viewer-app.ts mount order), so they
+   share the shell's width/centering here rather than nesting inside it. */
+.auth-card,
+.control-card,
+.chat-card,
+.quick-actions-card {
+  width: min(100%, 960px);
+  margin: 0 auto 1rem;
+  padding: 1.25rem;
+  border: 1px solid #3c342b;
+  border-radius: 1rem;
+  background: #1d1915;
+}
+
+.auth-card h2,
+.control-card h2,
+.chat-card h2,
+.quick-actions-card h2 {
+  margin: 0 0 0.5rem;
+  color: #fffaf0;
+  font-size: 1.125rem;
+}
+
+.auth-card p,
+.control-card p {
+  margin: 0 0 1rem;
+  color: #b9afa2;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.auth-error {
+  color: #ffb4a2;
+  font-weight: 600;
+}
+
+/* Every interactive control meets the 44x44px minimum tap target (iOS HIG /
+   WCAG 2.5.5) — this page's headline use case is one-thumb on a phone. */
+.auth-card label,
+.control-card label,
+.chat-card label,
+.quick-actions-card label {
+  display: block;
+  margin-bottom: 0.375rem;
+  color: #cdbf9f;
+  font-size: 0.875rem;
+}
+
+.auth-card input,
+.chat-card input,
+.quick-actions-card input {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #3c342b;
+  border-radius: 0.5rem;
+  background: #15120f;
+  color: #f4efe7;
+}
+
+.auth-card button,
+.control-card button,
+.chat-card button,
+.quick-actions-card button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid #cdbf9f;
+  border-radius: 0.5rem;
+  background: #cdbf9f;
+  color: #15120f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-card button:disabled,
+.control-card button:disabled,
+.chat-card button:disabled,
+.quick-actions-card button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-card [aria-label="Participants"] {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #d8d0c3;
+}
+
+.control-card [aria-label="Participants"] li {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid #3c342b;
+}
+
+.chat-messages {
+  max-height: 12rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.chat-messages li {
+  padding: 0.375rem 0;
+  color: #d8d0c3;
+  font-size: 0.9375rem;
+  word-break: break-word;
+}
+
+.chat-form,
+.quick-action-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.chat-form input,
+.quick-action-form input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+/* The core F6 differentiator: big one-thumb tap targets, pinned within
+   reach at the bottom of the viewport on phone-width screens rather than
+   competing for scroll position with the terminal above it. */
+.quick-action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.quick-action-buttons button {
+  flex: 1;
+  min-height: 48px;
+}
+
+@media (max-width: 767px) {
+  .quick-actions-card {
+    position: sticky;
+    bottom: 0;
+    margin: 0;
+    border-radius: 1rem 1rem 0 0;
+    box-shadow: 0 -0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+  }
+}
+
+@media (min-width: 768px) {
+  .control-card,
+  .chat-card,
+  .quick-actions-card {
+    width: min(100%, 960px);
+  }
+}

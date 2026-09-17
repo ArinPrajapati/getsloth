@@ -131,6 +131,10 @@ export class RelayClient {
     this.socket?.send(JSON.stringify({ v: 1, type: 'chat_message', text }));
   }
 
+  sendInput(bytes: Uint8Array): void {
+    this.socket?.send(JSON.stringify({ v: 1, type: 'input', data_base64: bytesToBase64(bytes) }));
+  }
+
   sendTakeControl(): void {
     this.socket?.send(JSON.stringify({ v: 1, type: 'take_control' }));
   }
@@ -139,4 +143,14 @@ export class RelayClient {
     this.socket?.close();
     this.socket = null;
   }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
 }

@@ -417,7 +417,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 1-2 files
 
-- [ ] **Task F6: Mobile quick-action overlay**
+- [x] **Task F6: Mobile quick-action overlay**
 
   **Description:** The core differentiator for the launch pitch — big tap
   targets for yes/no/continue plus a short-text input, layered over the

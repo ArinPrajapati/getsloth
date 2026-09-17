@@ -28,6 +28,7 @@ describe('mountViewerApp', () => {
     const root = document.createElement('div');
     const sentAuth: AuthMessage[] = [];
     const sentChat: string[] = [];
+    const sentInput: number[][] = [];
     const takeControl = vi.fn();
     const client: ViewerClient = {
       connect: vi.fn(),
@@ -37,6 +38,9 @@ describe('mountViewerApp', () => {
       },
       sendChatMessage: (text) => {
         sentChat.push(text);
+      },
+      sendInput: (bytes) => {
+        sentInput.push([...bytes]);
       },
       sendTakeControl: takeControl
     };
@@ -95,6 +99,9 @@ describe('mountViewerApp', () => {
 
     expect(sentChat).toEqual(['check auth middleware']);
     expect(root.querySelector('[aria-label="Chat messages"]')?.textContent).toContain('check auth middleware');
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Quick actions"] [data-action="yes"]')?.click();
+    expect(sentInput).toEqual([[121, 13]]);
   });
 
   it('shows auth failures without revealing the terminal', () => {
@@ -107,7 +114,7 @@ describe('mountViewerApp', () => {
       createTerminal: () => new FakeTerminal(),
       createClient: (options) => {
         capturedOptions.push(options);
-        return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendTakeControl: vi.fn() };
+        return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
       },
       createAuthMessage: () => Promise.resolve({
         v: 1,
@@ -129,7 +136,7 @@ describe('mountViewerApp', () => {
     const capturedOptions: RelayClientOptions[] = [];
     const createClient: ViewerClientFactory = (clientOptions) => {
       capturedOptions.push(clientOptions);
-      return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendTakeControl: vi.fn() };
+      return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
     };
 
     mountViewerApp(root, {

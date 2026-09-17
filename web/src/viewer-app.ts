@@ -3,6 +3,7 @@ import { createAuthGate } from './auth-gate';
 import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } from './auth';
 import { createChatPanel } from './chat-panel';
 import { createControlPanel } from './control-panel';
+import { createQuickActions } from './quick-actions';
 import { createTerminalView, type TerminalLike } from './terminal-view';
 import { RelayClient, type ConnectionState, type RelayClientOptions } from './ws-client';
 
@@ -11,6 +12,7 @@ export interface ViewerClient {
   disconnect(): void;
   sendAuth(message: AuthMessage): void;
   sendChatMessage(text: string): void;
+  sendInput(bytes: Uint8Array): void;
   sendTakeControl(): void;
 }
 
@@ -55,6 +57,11 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const chatPanel = createChatPanel(root, {
     onSend: (text) => {
       client.sendChatMessage(text);
+    }
+  });
+  createQuickActions(root, {
+    onInput: (bytes) => {
+      client.sendInput(bytes);
     }
   });
   const controlPanel = createControlPanel(root, {

@@ -148,6 +148,21 @@ describe('RelayClient', () => {
     expect(chunks).toEqual([]);
   });
 
+  it('sends PTY input bytes as base64 input messages', () => {
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined
+    });
+
+    client.connect();
+    client.sendInput(new Uint8Array([121, 13]));
+
+    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'input', data_base64: 'eQ0=' })]);
+  });
+
   it('surfaces transport errors and can disconnect explicitly', () => {
     const states: ConnectionState[] = [];
     const errors: string[] = [];
