@@ -301,7 +301,7 @@ Can start as soon as T0 is approved — does not need to wait on Backend
 tasks; build against a mock relay (a small local WebSocket stub emitting
 T0's message shapes) until B4/B5/B6 are ready for real integration.
 
-- [ ] **Task F1: Project scaffold + tooling wired to CONSTRAINTS.md**
+- [x] **Task F1: Project scaffold + tooling wired to CONSTRAINTS.md**
 
   **Description:** Vite + TypeScript scaffold, `eslint` + `tsc --noEmit`
   wired into `scripts/check.sh` (frontend variant), no framework beyond

@@ -29,7 +29,7 @@ token format). Phase 1 can start.
 **Checkpoint:** Backend feature-complete.
 
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
-- [ ] F1: Project scaffold + tooling wired to CONSTRAINTS.md
+- [x] F1: Project scaffold + tooling wired to CONSTRAINTS.md
 - [ ] F2: WebSocket client + xterm.js live render
 - [ ] F3: Password gate UI
 - [ ] F4: Take-control button + presence/control indicator

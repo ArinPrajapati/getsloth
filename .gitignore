@@ -2,3 +2,12 @@
 # See agent-session/README.md for the convention. README itself stays tracked.
 agent-session/*
 !agent-session/README.md
+
+# Frontend generated artifacts
+web/node_modules/
+web/dist/
+web/coverage/
+
+# Local git worktrees
+.worktrees/
+worktree/
