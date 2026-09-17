@@ -36,13 +36,16 @@ check still needed, signal-based host triggers (kill switch/reclaim)
 aren't discoverable in-session yet.
 
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
-- [ ] F1: Project scaffold + tooling wired to CONSTRAINTS.md
-- [ ] F2: WebSocket client + xterm.js live render
-- [ ] F3: Password gate UI
-- [ ] F4: Take-control button + presence/control indicator
-- [ ] F5: Chat panel
-- [ ] F6: Mobile quick-action overlay (yes/no/continue + text)
-- [ ] F7: Kicked / session-ended states
+- [x] F1: Project scaffold + tooling wired to CONSTRAINTS.md
+- [x] F2: WebSocket client + xterm.js live render
+- [x] F3: Password gate UI
+- [x] F4: Take-control button + presence/control indicator
+- [x] F5: Chat panel
+- [x] F6: Mobile quick-action overlay (yes/no/continue + text) — logic/tests
+      by Pi, styling/layout completed by Claude. Real-phone manual check
+      (plan.md's explicit acceptance criterion) still outstanding — human
+      task, not agent-verifiable.
+- [x] F7: Kicked / session-ended states — by Claude
 - [ ] F8: Responsive + accessibility + performance pass
 
 **Checkpoint:** Frontend feature-complete.

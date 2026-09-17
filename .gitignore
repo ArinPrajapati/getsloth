@@ -3,5 +3,14 @@
 agent-session/*
 !agent-session/README.md
 
+# Frontend generated artifacts
+web/node_modules/
+web/dist/
+web/coverage/
+
 # Git worktrees (per-agent isolated working directories)
 .worktrees/
+worktree/
+
+# Playwright MCP tool artifacts (page snapshot cache)
+.playwright-mcp/

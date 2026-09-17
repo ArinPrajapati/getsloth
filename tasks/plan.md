@@ -301,7 +301,7 @@ Can start as soon as T0 is approved — does not need to wait on Backend
 tasks; build against a mock relay (a small local WebSocket stub emitting
 T0's message shapes) until B4/B5/B6 are ready for real integration.
 
-- [ ] **Task F1: Project scaffold + tooling wired to CONSTRAINTS.md**
+- [x] **Task F1: Project scaffold + tooling wired to CONSTRAINTS.md**
 
   **Description:** Vite + TypeScript scaffold, `eslint` + `tsc --noEmit`
   wired into `scripts/check.sh` (frontend variant), no framework beyond
@@ -322,7 +322,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 4-5 files
 
-- [ ] **Task F2: WebSocket client + xterm.js live render**
+- [x] **Task F2: WebSocket client + xterm.js live render**
 
   **Description:** Connect to the relay per T0's protocol, render incoming
   `output` messages into an xterm.js instance. Build against a mock relay
@@ -347,7 +347,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Medium: 3-4 files
 
-- [ ] **Task F3: Password gate UI**
+- [x] **Task F3: Password gate UI**
 
   **Description:** Prompt for password before the terminal view is shown,
   submit as `auth`, handle `auth_result` (success reveals terminal, failure
@@ -369,7 +369,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 2 files
 
-- [ ] **Task F4: Take-control button + presence/control indicator**
+- [x] **Task F4: Take-control button + presence/control indicator**
 
   **Description:** UI for `take_control`, rendering `control_changed` and
   `presence` state — who's watching, who currently holds control, a
@@ -392,7 +392,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 2 files
 
-- [ ] **Task F5: Chat panel**
+- [x] **Task F5: Chat panel**
 
   **Description:** Send/receive `chat_message`, rendered in a panel beside
   the terminal. Explicitly never writes into the PTY input path (separate
@@ -417,7 +417,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 1-2 files
 
-- [ ] **Task F6: Mobile quick-action overlay**
+- [x] **Task F6: Mobile quick-action overlay**
 
   **Description:** The core differentiator for the launch pitch — big tap
   targets for yes/no/continue plus a short-text input, layered over the
@@ -444,7 +444,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Medium: 3 files
 
-- [ ] **Task F7: Kicked / session-ended states**
+- [x] **Task F7: Kicked / session-ended states**
 
   **Description:** Handle `kicked` (kill switch fired) and `session_ended`
   — clear, distinct UI states, not the same generic "disconnected" message,
