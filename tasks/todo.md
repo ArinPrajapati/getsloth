@@ -31,7 +31,7 @@ token format). Phase 1 can start.
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
 - [x] F1: Project scaffold + tooling wired to CONSTRAINTS.md
 - [x] F2: WebSocket client + xterm.js live render
-- [ ] F3: Password gate UI
+- [x] F3: Password gate UI
 - [ ] F4: Take-control button + presence/control indicator
 - [ ] F5: Chat panel
 - [ ] F6: Mobile quick-action overlay (yes/no/continue + text)

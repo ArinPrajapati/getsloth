@@ -83,6 +83,27 @@ describe('RelayClient', () => {
     expect(errors).toEqual(['No session']);
   });
 
+  it('sends auth messages and reports auth results', () => {
+    const authResults: boolean[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined,
+      onAuthResult: (result) => authResults.push(result.ok)
+    });
+
+    client.connect();
+    client.sendAuth({ v: 1, type: 'auth', viewer_pubkey_base64: 'pub', ciphertext_base64: 'cipher' });
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'auth_result', ok: true, token: 'token', connection_id: 'viewer-1' }));
+
+    expect(FakeSocket.created[0]?.sent).toEqual([
+      JSON.stringify({ v: 1, type: 'auth', viewer_pubkey_base64: 'pub', ciphertext_base64: 'cipher' })
+    ]);
+    expect(authResults).toEqual([true]);
+  });
+
   it('surfaces transport errors and can disconnect explicitly', () => {
     const states: ConnectionState[] = [];
     const errors: string[] = [];

@@ -1,4 +1,14 @@
-export type RelayMessage = ErrorMsg | OutputMsg;
+export type RelayMessage = AuthResultMsg | ErrorMsg | OutputMsg;
+
+export interface AuthResultMsg {
+  v: 1;
+  type: 'auth_result';
+  ok: boolean;
+  token?: string;
+  connection_id?: string;
+  code?: 'AUTH_FAILED' | 'RATE_LIMITED';
+  retry_after_ms?: number;
+}
 
 export interface ErrorMsg {
   v: 1;
@@ -34,6 +44,18 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
     return { v: 1, type: 'error', code: parsed.code, message: parsed.message };
   }
 
+  if (parsed.type === 'auth_result' && typeof parsed.ok === 'boolean') {
+    return {
+      v: 1,
+      type: 'auth_result',
+      ok: parsed.ok,
+      ...(typeof parsed.token === 'string' ? { token: parsed.token } : {}),
+      ...(typeof parsed.connection_id === 'string' ? { connection_id: parsed.connection_id } : {}),
+      ...(isAuthFailureCode(parsed.code) ? { code: parsed.code } : {}),
+      ...(typeof parsed.retry_after_ms === 'number' ? { retry_after_ms: parsed.retry_after_ms } : {})
+    };
+  }
+
   return null;
 }
 
@@ -60,4 +82,8 @@ function isErrorCode(value: unknown): value is ErrorMsg['code'] {
     value === 'UNSUPPORTED_VERSION' ||
     value === 'BAD_REQUEST'
   );
+}
+
+function isAuthFailureCode(value: unknown): value is NonNullable<AuthResultMsg['code']> {
+  return value === 'AUTH_FAILED' || value === 'RATE_LIMITED';
 }

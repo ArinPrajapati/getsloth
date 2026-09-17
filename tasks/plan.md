@@ -347,7 +347,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Medium: 3-4 files
 
-- [ ] **Task F3: Password gate UI**
+- [x] **Task F3: Password gate UI**
 
   **Description:** Prompt for password before the terminal view is shown,
   submit as `auth`, handle `auth_result` (success reveals terminal, failure
