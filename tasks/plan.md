@@ -392,7 +392,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 2 files
 
-- [ ] **Task F5: Chat panel**
+- [x] **Task F5: Chat panel**
 
   **Description:** Send/receive `chat_message`, rendered in a panel beside
   the terminal. Explicitly never writes into the PTY input path (separate

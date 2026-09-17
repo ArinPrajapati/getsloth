@@ -1,6 +1,7 @@
 import { renderAppShell } from './app';
 import { createAuthGate } from './auth-gate';
 import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } from './auth';
+import { createChatPanel } from './chat-panel';
 import { createControlPanel } from './control-panel';
 import { createTerminalView, type TerminalLike } from './terminal-view';
 import { RelayClient, type ConnectionState, type RelayClientOptions } from './ws-client';
@@ -9,6 +10,7 @@ export interface ViewerClient {
   connect(): void;
   disconnect(): void;
   sendAuth(message: AuthMessage): void;
+  sendChatMessage(text: string): void;
   sendTakeControl(): void;
 }
 
@@ -50,6 +52,11 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
 
   const createClient = options.createClient ?? ((clientOptions) => new RelayClient(clientOptions));
   let localConnectionId: string | null = null;
+  const chatPanel = createChatPanel(root, {
+    onSend: (text) => {
+      client.sendChatMessage(text);
+    }
+  });
   const controlPanel = createControlPanel(root, {
     localConnectionId,
     onTakeControl: () => {
@@ -93,6 +100,9 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
       }
 
       gate.showError(result.code === 'RATE_LIMITED' ? 'Too many attempts. Try again soon.' : 'Wrong password');
+    },
+    onChatMessage: (message) => {
+      chatPanel.addMessage(message);
     },
     onControlChanged: (control) => {
       controlPanel.updateControl(control);

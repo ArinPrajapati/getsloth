@@ -33,7 +33,7 @@ token format). Phase 1 can start.
 - [x] F2: WebSocket client + xterm.js live render
 - [x] F3: Password gate UI
 - [x] F4: Take-control button + presence/control indicator
-- [ ] F5: Chat panel
+- [x] F5: Chat panel
 - [ ] F6: Mobile quick-action overlay (yes/no/continue + text)
 - [ ] F7: Kicked / session-ended states
 - [ ] F8: Responsive + accessibility + performance pass

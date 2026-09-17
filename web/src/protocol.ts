@@ -1,4 +1,13 @@
-export type RelayMessage = AuthResultMsg | ControlChangedMsg | ErrorMsg | OutputMsg | PresenceMsg;
+export type RelayMessage = AuthResultMsg | ChatBroadcastMsg | ControlChangedMsg | ErrorMsg | OutputMsg | PresenceMsg;
+
+export interface ChatBroadcastMsg {
+  v: 1;
+  type: 'chat_message';
+  sender_id: string;
+  sender_role: 'host' | 'viewer';
+  sender_display_name?: string;
+  text: string;
+}
 
 export interface ControlChangedMsg {
   v: 1;
@@ -73,6 +82,23 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
       ...(typeof parsed.connection_id === 'string' ? { connection_id: parsed.connection_id } : {}),
       ...(isAuthFailureCode(parsed.code) ? { code: parsed.code } : {}),
       ...(typeof parsed.retry_after_ms === 'number' ? { retry_after_ms: parsed.retry_after_ms } : {})
+    };
+  }
+
+  if (
+    parsed.type === 'chat_message' &&
+    typeof parsed.sender_id === 'string' &&
+    isRole(parsed.sender_role) &&
+    (typeof parsed.sender_display_name === 'string' || parsed.sender_display_name === undefined) &&
+    typeof parsed.text === 'string'
+  ) {
+    return {
+      v: 1,
+      type: 'chat_message',
+      sender_id: parsed.sender_id,
+      sender_role: parsed.sender_role,
+      ...(typeof parsed.sender_display_name === 'string' ? { sender_display_name: parsed.sender_display_name } : {}),
+      text: parsed.text
     };
   }
 

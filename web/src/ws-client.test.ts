@@ -127,6 +127,27 @@ describe('RelayClient', () => {
     expect(participantCounts).toEqual([1]);
   });
 
+  it('sends and receives chat messages separately from terminal output', () => {
+    const messages: string[] = [];
+    const chunks: number[][] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: (bytes) => chunks.push([...bytes]),
+      onErrorMessage: () => undefined,
+      onChatMessage: (message) => messages.push(message.text)
+    });
+
+    client.connect();
+    client.sendChatMessage('hello host');
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'chat_message', sender_id: 'viewer-1', sender_role: 'viewer', text: 'hello host' }));
+
+    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'chat_message', text: 'hello host' })]);
+    expect(messages).toEqual(['hello host']);
+    expect(chunks).toEqual([]);
+  });
+
   it('surfaces transport errors and can disconnect explicitly', () => {
     const states: ConnectionState[] = [];
     const errors: string[] = [];
