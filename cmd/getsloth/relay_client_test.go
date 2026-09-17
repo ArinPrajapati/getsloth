@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arinprajapati/getsloth/internal/hostauth"
 	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/arinprajapati/getsloth/internal/relay"
 	"github.com/gorilla/websocket"
@@ -41,12 +42,35 @@ func TestRelayOutputWriter_ChunksLargeWritesAndReachesViewer(t *testing.T) {
 	}
 	defer func() { _ = ws.Close() }()
 
+	keys, err := hostauth.NewKeyPair()
+	if err != nil {
+		t.Fatalf("NewKeyPair: %v", err)
+	}
+	const password = "chunk-test-password"
+	go listenForAuthRequests(ws, created.SessionID, password, keys)
+
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
 		t.Fatalf("dialing viewer: %v", err)
 	}
 	defer func() { _ = viewer.Close() }()
-	time.Sleep(50 * time.Millisecond) // let the viewer registration land
+
+	viewerPub, ciphertext := encryptAsViewer(t, keys.PublicKeyBase64URL(), created.SessionID, password)
+	if err := viewer.WriteJSON(protocol.AuthMsg{
+		Envelope:           protocol.NewEnvelope("auth"),
+		ViewerPubkeyBase64: viewerPub,
+		CiphertextBase64:   ciphertext,
+	}); err != nil {
+		t.Fatalf("sending auth: %v", err)
+	}
+	_ = viewer.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var authResult protocol.AuthResultMsg
+	if err := viewer.ReadJSON(&authResult); err != nil {
+		t.Fatalf("ReadJSON auth_result: %v", err)
+	}
+	if !authResult.OK {
+		t.Fatalf("authentication failed, can't test output chunking")
+	}
 
 	w := &relayOutputWriter{ws: ws}
 

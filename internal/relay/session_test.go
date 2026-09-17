@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -34,6 +35,58 @@ func readMsg(t *testing.T, conn *websocket.Conn, v any) {
 	if err := conn.ReadJSON(v); err != nil {
 		t.Fatalf("ReadJSON: %v", err)
 	}
+}
+
+// simulateHostAuthResponder answers every auth_request the host
+// connection receives with a fixed verdict. Relay-level tests don't need
+// real cryptography for this - that's internal/hostauth's job, tested
+// independently in internal/hostauth/hostauth_test.go. These tests only
+// need to prove the relay routes and gates correctly given whatever
+// verdict the host returns.
+func simulateHostAuthResponder(t *testing.T, host *websocket.Conn, ok bool) {
+	t.Helper()
+	go func() {
+		for {
+			_, raw, err := host.ReadMessage()
+			if err != nil {
+				return
+			}
+			var env protocol.Envelope
+			if err := json.Unmarshal(raw, &env); err != nil {
+				continue
+			}
+			if env.Type != "auth_request" {
+				continue
+			}
+			var req protocol.AuthRequestMsg
+			if err := json.Unmarshal(raw, &req); err != nil {
+				continue
+			}
+			_ = host.WriteJSON(protocol.AuthResponseMsg{
+				Envelope:  protocol.NewEnvelope("auth_response"),
+				RequestID: req.RequestID,
+				OK:        ok,
+			})
+		}
+	}()
+}
+
+// authenticateViewer drives a full auth round-trip and returns the
+// issued token. The auth payload content is irrelevant at the relay
+// level (the relay forwards it opaquely); simulateHostAuthResponder must
+// already be running on host with ok=true for this to succeed.
+func authenticateViewer(t *testing.T, viewer *websocket.Conn) protocol.AuthResultMsg {
+	t.Helper()
+	if err := viewer.WriteJSON(protocol.AuthMsg{
+		Envelope:           protocol.NewEnvelope("auth"),
+		ViewerPubkeyBase64: "test-pubkey",
+		CiphertextBase64:   "test-ciphertext",
+	}); err != nil {
+		t.Fatalf("sending auth: %v", err)
+	}
+	var result protocol.AuthResultMsg
+	readMsg(t, viewer, &result)
+	return result
 }
 
 func TestHostConnect_CreatesSessionAndReceivesSessionCreated(t *testing.T) {
@@ -156,8 +209,11 @@ func TestOutput_ReachesViewer_NotHost(t *testing.T) {
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 
+	simulateHostAuthResponder(t, host, true)
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
-	time.Sleep(50 * time.Millisecond) // let the viewer registration land
+	if result := authenticateViewer(t, viewer); !result.OK {
+		t.Fatalf("authenticateViewer: ok=false, want true")
+	}
 
 	if err := host.WriteJSON(protocol.OutputMsg{
 		Envelope:   protocol.NewEnvelope("output"),
@@ -194,8 +250,11 @@ func TestOutput_PreservesOrderAcrossManyRapidChunks(t *testing.T) {
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 
+	simulateHostAuthResponder(t, host, true)
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
-	time.Sleep(50 * time.Millisecond)
+	if result := authenticateViewer(t, viewer); !result.OK {
+		t.Fatalf("authenticateViewer: ok=false, want true")
+	}
 
 	const n = 200
 	for i := 0; i < n; i++ {

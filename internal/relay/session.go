@@ -9,16 +9,26 @@ import (
 )
 
 // Session represents one running getsloth host and its connected
-// viewers. It does not route input/output yet - that starts in Task B4.
-// B3 covers connection lifecycle only: creation, viewer join/reject, and
-// teardown when the host disconnects.
+// viewers.
 type Session struct {
 	ID string
 
-	mu      sync.Mutex
-	host    *Connection
-	viewers map[string]*Connection
-	closed  bool
+	mu          sync.Mutex
+	host        *Connection
+	viewers     map[string]*Connection
+	closed      bool
+	pendingAuth map[string]pendingAuth // requestID -> the viewer awaiting a verdict
+	tokens      map[string]string      // relay-issued token -> the connection_id it authenticates
+}
+
+// pendingAuth tracks a viewer's auth attempt while it's awaiting the
+// host's verdict, so the relay can route auth_response back to the
+// right connection and record the outcome against the right rate-limit
+// bucket.
+type pendingAuth struct {
+	viewerID   string
+	conn       *Connection
+	remoteAddr string
 }
 
 // newRandomID generates a URL-safe random identifier - used both for
@@ -82,7 +92,9 @@ func (s *Session) broadcastOutput(dataBase64 string) {
 	s.mu.Lock()
 	viewers := make([]*Connection, 0, len(s.viewers))
 	for _, c := range s.viewers {
-		viewers = append(viewers, c)
+		if c.isAuthenticated() {
+			viewers = append(viewers, c)
+		}
 	}
 	s.mu.Unlock()
 
@@ -115,7 +127,12 @@ func (r *Registry) Create() (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{ID: id, viewers: map[string]*Connection{}}
+	s := &Session{
+		ID:          id,
+		viewers:     map[string]*Connection{},
+		pendingAuth: map[string]pendingAuth{},
+		tokens:      map[string]string{},
+	}
 	r.mu.Lock()
 	r.sessions[id] = s
 	r.mu.Unlock()

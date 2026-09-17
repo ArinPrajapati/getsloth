@@ -79,6 +79,60 @@ type OutputMsg struct {
 // OutputMsg.DataBase64, per docs/protocol.md's Limits table.
 const MaxOutputChunkBytes = 65536
 
+// AuthMsg is a viewer's password attempt, encrypted per
+// docs/protocol.md's Crypto wire format - the plaintext password never
+// crosses the wire, and neither does anything the relay could decrypt.
+type AuthMsg struct {
+	Envelope
+	ViewerPubkeyBase64 string `json:"viewer_pubkey_base64"`
+	CiphertextBase64   string `json:"ciphertext_base64"`
+	DisplayName        string `json:"display_name,omitempty"`
+}
+
+// ResumeMsg lets a viewer reconnect with a previously issued token
+// instead of re-authenticating, per docs/protocol.md's Reconnect
+// section.
+type ResumeMsg struct {
+	Envelope
+	Token string `json:"token"`
+}
+
+// AuthRequestMsg is the relay forwarding a viewer's auth attempt to the
+// host, opaquely - the relay never inspects CiphertextBase64's content,
+// only routes it.
+type AuthRequestMsg struct {
+	Envelope
+	RequestID          string `json:"request_id"`
+	ViewerPubkeyBase64 string `json:"viewer_pubkey_base64"`
+	CiphertextBase64   string `json:"ciphertext_base64"`
+}
+
+// AuthResponseMsg is the host's verdict on one AuthRequestMsg. There is
+// deliberately no token field here - the relay issues the token itself,
+// per docs/protocol.md's Auth flow step 6 (the host generating it would
+// leave the relay with no way to validate it later on resume).
+type AuthResponseMsg struct {
+	Envelope
+	RequestID string `json:"request_id"`
+	OK        bool   `json:"ok"`
+}
+
+// AuthResultMsg is the relay's reply to a viewer's auth or resume
+// attempt.
+type AuthResultMsg struct {
+	Envelope
+	OK           bool   `json:"ok"`
+	Token        string `json:"token,omitempty"`
+	ConnectionID string `json:"connection_id,omitempty"`
+	Code         string `json:"code,omitempty"`
+	RetryAfterMs int64  `json:"retry_after_ms,omitempty"`
+}
+
+const (
+	AuthCodeFailed      = "AUTH_FAILED"
+	AuthCodeRateLimited = "RATE_LIMITED"
+)
+
 // Custom WebSocket close codes, application range per RFC 6455. See
 // docs/protocol.md's "Socket lifecycle" section.
 const (

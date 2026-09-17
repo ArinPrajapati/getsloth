@@ -15,13 +15,15 @@ import (
 // auth-decision logic - see CONSTRAINTS.md's architecture rule and the
 // depguard entry in .golangci.yml that enforces it.
 type Server struct {
-	registry *Registry
-	upgrader websocket.Upgrader
+	registry    *Registry
+	rateLimiter *rateLimiter
+	upgrader    websocket.Upgrader
 }
 
 func NewServer() *Server {
 	return &Server{
-		registry: NewRegistry(),
+		registry:    NewRegistry(),
+		rateLimiter: newRateLimiter(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -44,7 +46,7 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	conn := newConnection(ws)
+	conn := newConnection(ws, "host")
 
 	session, err := s.registry.Create()
 	if err != nil {
@@ -66,15 +68,14 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Block until the host disconnects, dispatching each message as it
-	// arrives. Only "output" is handled so far (B4); auth_response,
-	// take_control, kill_switch, chat_message, end_session arrive in
-	// later tasks.
+	// arrives. take_control, kill_switch, chat_message, end_session
+	// arrive in later tasks.
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
 			break
 		}
-		handleHostMessage(session, raw)
+		s.handleHostMessage(session, raw)
 	}
 
 	session.teardown(protocol.ReasonHostDisconnected)
@@ -83,7 +84,7 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 
 // handleHostMessage decodes one message from the host connection and
 // acts on it.
-func handleHostMessage(session *Session, raw []byte) {
+func (s *Server) handleHostMessage(session *Session, raw []byte) {
 	var env protocol.Envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return
@@ -96,20 +97,27 @@ func handleHostMessage(session *Session, raw []byte) {
 			return
 		}
 		session.broadcastOutput(msg.DataBase64)
+	case "auth_response":
+		var msg protocol.AuthResponseMsg
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			return
+		}
+		s.handleAuthResponse(session, msg)
 	}
 }
 
 func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 	sessionID := strings.TrimPrefix(r.URL.Path, "/ws/viewer/")
 	session, ok := s.registry.Get(sessionID)
+	remoteAddr := r.RemoteAddr
 
 	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
-	conn := newConnection(ws)
 
 	if !ok {
+		conn := newConnection(ws, "")
 		_ = conn.writeJSON(protocol.ErrorMsg{
 			Envelope: protocol.NewEnvelope("error"),
 			Code:     protocol.ErrSessionNotFound,
@@ -121,9 +129,10 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 
 	viewerID, err := newRandomID()
 	if err != nil {
-		conn.closeWithCode(protocol.CloseBadRequest, "internal error")
+		newConnection(ws, "").closeWithCode(protocol.CloseBadRequest, "internal error")
 		return
 	}
+	conn := newConnection(ws, viewerID)
 
 	if !session.addViewer(viewerID, conn) {
 		_ = conn.writeJSON(protocol.ErrorMsg{
@@ -135,13 +144,14 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Block until the viewer disconnects. Auth, output, chat, etc.
-	// arrive in B5+.
+	// Block until the viewer disconnects, dispatching each message.
 	for {
-		if _, _, err := ws.ReadMessage(); err != nil {
+		_, raw, err := ws.ReadMessage()
+		if err != nil {
 			break
 		}
+		s.handleViewerMessage(session, conn, remoteAddr, raw)
 	}
 
-	session.removeViewer(viewerID)
+	session.removeViewer(conn.ID())
 }

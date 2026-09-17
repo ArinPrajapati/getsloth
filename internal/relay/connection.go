@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -10,12 +11,45 @@ import (
 // viewer - with helpers for sending typed protocol messages and closing
 // with a specific application close code per docs/protocol.md's Socket
 // lifecycle section.
+//
+// id and authenticated are mutable: id changes on a successful resume
+// (the reconnecting connection adopts the original connection_id the
+// token was issued under, see Session.handleResume), and authenticated
+// flips true once auth or resume succeeds.
 type Connection struct {
 	ws *websocket.Conn
+
+	mu            sync.Mutex
+	id            string
+	authenticated bool
 }
 
-func newConnection(ws *websocket.Conn) *Connection {
-	return &Connection{ws: ws}
+func newConnection(ws *websocket.Conn, id string) *Connection {
+	return &Connection{ws: ws, id: id}
+}
+
+func (c *Connection) ID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.id
+}
+
+func (c *Connection) setID(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.id = id
+}
+
+func (c *Connection) isAuthenticated() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.authenticated
+}
+
+func (c *Connection) setAuthenticated(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.authenticated = v
 }
 
 func (c *Connection) writeJSON(v any) error {
