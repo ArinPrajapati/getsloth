@@ -1,6 +1,7 @@
 import { renderAppShell } from './app';
 import { createAuthGate } from './auth-gate';
 import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } from './auth';
+import { createControlPanel } from './control-panel';
 import { createTerminalView, type TerminalLike } from './terminal-view';
 import { RelayClient, type ConnectionState, type RelayClientOptions } from './ws-client';
 
@@ -8,6 +9,7 @@ export interface ViewerClient {
   connect(): void;
   disconnect(): void;
   sendAuth(message: AuthMessage): void;
+  sendTakeControl(): void;
 }
 
 export type ViewerClientFactory = (options: RelayClientOptions) => ViewerClient;
@@ -47,6 +49,13 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   }
 
   const createClient = options.createClient ?? ((clientOptions) => new RelayClient(clientOptions));
+  let localConnectionId: string | null = null;
+  const controlPanel = createControlPanel(root, {
+    localConnectionId,
+    onTakeControl: () => {
+      client.sendTakeControl();
+    }
+  });
   const gate = createAuthGate(root, {
     onSubmit: (submission) => {
       connectionStatus.textContent = 'Checking password…';
@@ -75,6 +84,8 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     },
     onAuthResult: (result) => {
       if (result.ok) {
+        localConnectionId = result.connection_id ?? null;
+        controlPanel.setLocalConnectionId(localConnectionId);
         gate.remove();
         terminalCard.hidden = false;
         connectionStatus.textContent = 'Connected';
@@ -82,6 +93,12 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
       }
 
       gate.showError(result.code === 'RATE_LIMITED' ? 'Too many attempts. Try again soon.' : 'Wrong password');
+    },
+    onControlChanged: (control) => {
+      controlPanel.updateControl(control);
+    },
+    onPresence: (presence) => {
+      controlPanel.updatePresence(presence.connections);
     }
   });
 

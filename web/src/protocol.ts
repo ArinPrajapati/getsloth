@@ -1,4 +1,24 @@
-export type RelayMessage = AuthResultMsg | ErrorMsg | OutputMsg;
+export type RelayMessage = AuthResultMsg | ControlChangedMsg | ErrorMsg | OutputMsg | PresenceMsg;
+
+export interface ControlChangedMsg {
+  v: 1;
+  type: 'control_changed';
+  active_writer_id: string;
+  active_writer_role: 'host' | 'viewer';
+}
+
+export interface PresenceConnection {
+  id: string;
+  role: 'host' | 'viewer';
+  display_name?: string;
+  is_active_writer: boolean;
+}
+
+export interface PresenceMsg {
+  v: 1;
+  type: 'presence';
+  connections: PresenceConnection[];
+}
 
 export interface AuthResultMsg {
   v: 1;
@@ -56,6 +76,27 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
     };
   }
 
+  if (
+    parsed.type === 'control_changed' &&
+    typeof parsed.active_writer_id === 'string' &&
+    isRole(parsed.active_writer_role)
+  ) {
+    return {
+      v: 1,
+      type: 'control_changed',
+      active_writer_id: parsed.active_writer_id,
+      active_writer_role: parsed.active_writer_role
+    };
+  }
+
+  if (parsed.type === 'presence' && Array.isArray(parsed.connections)) {
+    const connections = parsed.connections.filter(isPresenceConnection);
+
+    if (connections.length === parsed.connections.length) {
+      return { v: 1, type: 'presence', connections };
+    }
+  }
+
   return null;
 }
 
@@ -86,4 +127,18 @@ function isErrorCode(value: unknown): value is ErrorMsg['code'] {
 
 function isAuthFailureCode(value: unknown): value is NonNullable<AuthResultMsg['code']> {
   return value === 'AUTH_FAILED' || value === 'RATE_LIMITED';
+}
+
+function isPresenceConnection(value: unknown): value is PresenceConnection {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    isRole(value.role) &&
+    (typeof value.display_name === 'string' || value.display_name === undefined) &&
+    typeof value.is_active_writer === 'boolean'
+  );
+}
+
+function isRole(value: unknown): value is 'host' | 'viewer' {
+  return value === 'host' || value === 'viewer';
 }

@@ -27,12 +27,14 @@ describe('mountViewerApp', () => {
   it('submits encrypted auth and reveals the terminal after auth succeeds', async () => {
     const root = document.createElement('div');
     const sentAuth: AuthMessage[] = [];
+    const takeControl = vi.fn();
     const client: ViewerClient = {
       connect: vi.fn(),
       disconnect: vi.fn(),
       sendAuth: (message) => {
         sentAuth.push(message);
-      }
+      },
+      sendTakeControl: takeControl
     };
     const capturedOptions: Parameters<ViewerClientFactory>[0][] = [];
 
@@ -68,6 +70,13 @@ describe('mountViewerApp', () => {
 
     expect(root.querySelector('form')).toBeNull();
     expect(root.querySelector<HTMLElement>('[aria-label="Terminal output"]')?.hidden).toBe(false);
+
+    capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' });
+    expect(root.querySelector('[aria-label="Control status"]')?.textContent).toContain('You are driving');
+
+    capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'host-1', active_writer_role: 'host' });
+    root.querySelector<HTMLButtonElement>('[aria-label="Session control"] button')?.click();
+    expect(takeControl).toHaveBeenCalledTimes(1);
   });
 
   it('shows auth failures without revealing the terminal', () => {
@@ -80,7 +89,7 @@ describe('mountViewerApp', () => {
       createTerminal: () => new FakeTerminal(),
       createClient: (options) => {
         capturedOptions.push(options);
-        return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn() };
+        return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendTakeControl: vi.fn() };
       },
       createAuthMessage: () => Promise.resolve({
         v: 1,
@@ -102,7 +111,7 @@ describe('mountViewerApp', () => {
     const capturedOptions: RelayClientOptions[] = [];
     const createClient: ViewerClientFactory = (clientOptions) => {
       capturedOptions.push(clientOptions);
-      return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn() };
+      return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendTakeControl: vi.fn() };
     };
 
     mountViewerApp(root, {

@@ -104,6 +104,29 @@ describe('RelayClient', () => {
     expect(authResults).toEqual([true]);
   });
 
+  it('sends take_control and reports control and presence broadcasts', () => {
+    const activeWriters: string[] = [];
+    const participantCounts: number[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined,
+      onControlChanged: (control) => activeWriters.push(control.active_writer_id),
+      onPresence: (presence) => participantCounts.push(presence.connections.length)
+    });
+
+    client.connect();
+    client.sendTakeControl();
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' }));
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'presence', connections: [{ id: 'viewer-1', role: 'viewer', is_active_writer: true }] }));
+
+    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'take_control' })]);
+    expect(activeWriters).toEqual(['viewer-1']);
+    expect(participantCounts).toEqual([1]);
+  });
+
   it('surfaces transport errors and can disconnect explicitly', () => {
     const states: ConnectionState[] = [];
     const errors: string[] = [];

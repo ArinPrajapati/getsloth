@@ -369,7 +369,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 2 files
 
-- [ ] **Task F4: Take-control button + presence/control indicator**
+- [x] **Task F4: Take-control button + presence/control indicator**
 
   **Description:** UI for `take_control`, rendering `control_changed` and
   `presence` state — who's watching, who currently holds control, a
