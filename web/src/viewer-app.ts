@@ -4,6 +4,7 @@ import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } fr
 import { createChatPanel } from './chat-panel';
 import { createControlPanel } from './control-panel';
 import { createQuickActions } from './quick-actions';
+import { createSessionState } from './session-state';
 import { createTerminalView, type TerminalLike } from './terminal-view';
 import { RelayClient, type ConnectionState, type RelayClientOptions } from './ws-client';
 
@@ -53,6 +54,7 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   }
 
   const createClient = options.createClient ?? ((clientOptions) => new RelayClient(clientOptions));
+  const sessionState = createSessionState(root);
   let localConnectionId: string | null = null;
   const chatPanel = createChatPanel(root, {
     onSend: (text) => {
@@ -116,6 +118,14 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     },
     onPresence: (presence) => {
       controlPanel.updatePresence(presence.connections);
+    },
+    onKicked: () => {
+      client.disconnect();
+      sessionState.showKicked();
+    },
+    onSessionEnded: (message) => {
+      client.disconnect();
+      sessionState.showSessionEnded(message.reason);
     }
   });
 

@@ -5,7 +5,9 @@ import {
   type AuthResultMsg,
   type ChatBroadcastMsg,
   type ControlChangedMsg,
-  type PresenceMsg
+  type KickedMsg,
+  type PresenceMsg,
+  type SessionEndedMsg
 } from './protocol';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected';
@@ -29,6 +31,8 @@ export interface RelayClientOptions {
   onChatMessage?(message: ChatBroadcastMsg): void;
   onControlChanged?(control: ControlChangedMsg): void;
   onPresence?(presence: PresenceMsg): void;
+  onKicked?(message: KickedMsg): void;
+  onSessionEnded?(message: SessionEndedMsg): void;
 }
 
 export class RelayClient {
@@ -37,8 +41,10 @@ export class RelayClient {
   private readonly onChatMessage: (message: ChatBroadcastMsg) => void;
   private readonly onControlChanged: (control: ControlChangedMsg) => void;
   private readonly onErrorMessage: (message: string) => void;
+  private readonly onKicked: (message: KickedMsg) => void;
   private readonly onOutput: (bytes: Uint8Array) => void;
   private readonly onPresence: (presence: PresenceMsg) => void;
+  private readonly onSessionEnded: (message: SessionEndedMsg) => void;
   private readonly onStateChange: (state: ConnectionState) => void;
   private readonly url: string;
   private socket: SocketLike | null = null;
@@ -57,6 +63,12 @@ export class RelayClient {
     };
     this.onPresence = (presence) => {
       options.onPresence?.(presence);
+    };
+    this.onKicked = (message) => {
+      options.onKicked?.(message);
+    };
+    this.onSessionEnded = (message) => {
+      options.onSessionEnded?.(message);
     };
     this.onStateChange = (state) => {
       options.onStateChange(state);
@@ -116,6 +128,16 @@ export class RelayClient {
 
       if (message.type === 'presence') {
         this.onPresence(message);
+        return;
+      }
+
+      if (message.type === 'kicked') {
+        this.onKicked(message);
+        return;
+      }
+
+      if (message.type === 'session_ended') {
+        this.onSessionEnded(message);
         return;
       }
 

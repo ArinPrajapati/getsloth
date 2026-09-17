@@ -444,7 +444,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Medium: 3 files
 
-- [ ] **Task F7: Kicked / session-ended states**
+- [x] **Task F7: Kicked / session-ended states**
 
   **Description:** Handle `kicked` (kill switch fired) and `session_ended`
   — clear, distinct UI states, not the same generic "disconnected" message,

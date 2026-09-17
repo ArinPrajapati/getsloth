@@ -1,4 +1,24 @@
-export type RelayMessage = AuthResultMsg | ChatBroadcastMsg | ControlChangedMsg | ErrorMsg | OutputMsg | PresenceMsg;
+export type RelayMessage =
+  | AuthResultMsg
+  | ChatBroadcastMsg
+  | ControlChangedMsg
+  | ErrorMsg
+  | KickedMsg
+  | OutputMsg
+  | PresenceMsg
+  | SessionEndedMsg;
+
+export interface KickedMsg {
+  v: 1;
+  type: 'kicked';
+  reason: 'kill_switch';
+}
+
+export interface SessionEndedMsg {
+  v: 1;
+  type: 'session_ended';
+  reason: 'process_exited' | 'host_ended' | 'host_disconnected';
+}
 
 export interface ChatBroadcastMsg {
   v: 1;
@@ -123,6 +143,14 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
     }
   }
 
+  if (parsed.type === 'kicked' && parsed.reason === 'kill_switch') {
+    return { v: 1, type: 'kicked', reason: 'kill_switch' };
+  }
+
+  if (parsed.type === 'session_ended' && isSessionEndedReason(parsed.reason)) {
+    return { v: 1, type: 'session_ended', reason: parsed.reason };
+  }
+
   return null;
 }
 
@@ -167,4 +195,8 @@ function isPresenceConnection(value: unknown): value is PresenceConnection {
 
 function isRole(value: unknown): value is 'host' | 'viewer' {
   return value === 'host' || value === 'viewer';
+}
+
+function isSessionEndedReason(value: unknown): value is SessionEndedMsg['reason'] {
+  return value === 'process_exited' || value === 'host_ended' || value === 'host_disconnected';
 }

@@ -100,6 +100,33 @@ h1 {
   }
 }
 
+/* session-status-card takes over #app entirely (session-state.ts clears
+   root before rendering it), so it centers itself rather than following
+   the sibling-card width rule below. */
+.session-status-card {
+  width: min(100%, 40rem);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 3rem 1.25rem;
+  display: grid;
+  align-content: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.session-status-card h1 {
+  margin: 0;
+  color: #fffaf0;
+  font-size: clamp(1.75rem, 6vw, 2.5rem);
+}
+
+.session-status-card p {
+  margin: 0;
+  color: #d8d0c3;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
 /* Auth gate, control, chat and quick-action cards render as siblings of
    .app-shell directly under #app (see viewer-app.ts mount order), so they
    share the shell's width/centering here rather than nesting inside it. */

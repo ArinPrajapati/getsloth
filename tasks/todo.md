@@ -38,7 +38,7 @@ token format). Phase 1 can start.
       by Pi, styling/layout completed by Claude. Real-phone manual check
       (plan.md's explicit acceptance criterion) still outstanding — human
       task, not agent-verifiable.
-- [ ] F7: Kicked / session-ended states
+- [x] F7: Kicked / session-ended states — by Claude
 - [ ] F8: Responsive + accessibility + performance pass
 
 **Checkpoint:** Frontend feature-complete.

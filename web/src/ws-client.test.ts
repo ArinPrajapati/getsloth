@@ -181,4 +181,25 @@ describe('RelayClient', () => {
     expect(errors).toEqual(['Connection failed']);
     expect(states).toEqual(['connecting', 'disconnected']);
   });
+
+  it('reports kicked separately from session_ended', () => {
+    const kicked: string[] = [];
+    const ended: string[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined,
+      onKicked: (message) => kicked.push(message.reason),
+      onSessionEnded: (message) => ended.push(message.reason)
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'kicked', reason: 'kill_switch' }));
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'session_ended', reason: 'host_ended' }));
+
+    expect(kicked).toEqual(['kill_switch']);
+    expect(ended).toEqual(['host_ended']);
+  });
 });

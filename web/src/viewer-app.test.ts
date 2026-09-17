@@ -154,4 +154,51 @@ describe('mountViewerApp', () => {
     expect(root.querySelector('[aria-label="Connection status"]')?.textContent).toContain('Connected');
     expect(terminal.writes).toEqual([new Uint8Array([72, 105])]);
   });
+
+  it('shows a distinct kicked state and clears stale terminal UI', () => {
+    const root = document.createElement('div');
+    const disconnect = vi.fn();
+    const capturedOptions: RelayClientOptions[] = [];
+    const createClient: ViewerClientFactory = (clientOptions) => {
+      capturedOptions.push(clientOptions);
+      return { connect: vi.fn(), disconnect, sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
+    };
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => new FakeTerminal(),
+      createClient
+    });
+
+    capturedOptions[0]?.onKicked?.({ v: 1, type: 'kicked', reason: 'kill_switch' });
+
+    expect(root.querySelector('[aria-label="Terminal output"]')).toBeNull();
+    expect(root.querySelector('[aria-label="Session status"]')?.textContent).toContain('Host ended your access');
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a distinct session_ended state and clears stale terminal UI', () => {
+    const root = document.createElement('div');
+    const disconnect = vi.fn();
+    const capturedOptions: RelayClientOptions[] = [];
+    const createClient: ViewerClientFactory = (clientOptions) => {
+      capturedOptions.push(clientOptions);
+      return { connect: vi.fn(), disconnect, sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
+    };
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => new FakeTerminal(),
+      createClient
+    });
+
+    capturedOptions[0]?.onSessionEnded?.({ v: 1, type: 'session_ended', reason: 'process_exited' });
+
+    expect(root.querySelector('[aria-label="Terminal output"]')).toBeNull();
+    expect(root.querySelector('[aria-label="Session status"]')?.textContent).toContain('Session is over');
+    expect(root.querySelector('[aria-label="Session status"]')?.textContent).not.toContain('Host ended your access');
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
 });
