@@ -1,3 +1,5 @@
+import { encodeBase64Bytes } from './protocol';
+
 export interface AuthMessage {
   v: 1;
   type: 'auth';
@@ -63,8 +65,8 @@ export async function createAuthMessage(options: CreateAuthMessageOptions): Prom
   const message: AuthMessage = {
     v: 1,
     type: 'auth',
-    viewer_pubkey_base64: bytesToBase64(viewerPublicKey),
-    ciphertext_base64: bytesToBase64(concatBytes(nonce, ciphertext))
+    viewer_pubkey_base64: encodeBase64Bytes(viewerPublicKey),
+    ciphertext_base64: encodeBase64Bytes(concatBytes(nonce, ciphertext))
   };
 
   if (options.displayName) {
@@ -75,22 +77,12 @@ export async function createAuthMessage(options: CreateAuthMessageOptions): Prom
 }
 
 export function rawPublicKeyToFragmentKey(bytes: Uint8Array): string {
-  return bytesToBase64(bytes).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  return encodeBase64Bytes(bytes).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
 function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
   return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
 }
 
 function concatBytes(first: Uint8Array, second: Uint8Array): Uint8Array {

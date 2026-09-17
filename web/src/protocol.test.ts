@@ -1,4 +1,4 @@
-import { decodeBase64Bytes, parseRelayMessage } from './protocol';
+import { decodeBase64Bytes, encodeBase64Bytes, parseRelayMessage } from './protocol';
 
 describe('parseRelayMessage', () => {
   it('accepts relay output messages from protocol v1', () => {
@@ -58,5 +58,14 @@ describe('decodeBase64Bytes', () => {
     const bytes = decodeBase64Bytes('SGkNCg==');
 
     expect([...bytes]).toEqual([72, 105, 13, 10]);
+  });
+});
+
+describe('encodeBase64Bytes', () => {
+  it('encodes raw bytes to base64, round-tripping through decodeBase64Bytes', () => {
+    const bytes = new Uint8Array([72, 105, 13, 10]);
+
+    expect(encodeBase64Bytes(bytes)).toBe('SGkNCg==');
+    expect([...decodeBase64Bytes(encodeBase64Bytes(bytes))]).toEqual([...bytes]);
   });
 });

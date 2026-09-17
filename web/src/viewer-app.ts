@@ -61,7 +61,7 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
       client.sendChatMessage(text);
     }
   });
-  createQuickActions(root, {
+  const quickActions = createQuickActions(root, {
     onInput: (bytes) => {
       client.sendInput(bytes);
     }
@@ -115,6 +115,7 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     },
     onControlChanged: (control) => {
       controlPanel.updateControl(control);
+      quickActions.setActive(control.active_writer_id === localConnectionId);
     },
     onPresence: (presence) => {
       controlPanel.updatePresence(presence.connections);

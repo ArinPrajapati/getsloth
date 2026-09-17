@@ -154,6 +154,16 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
   return null;
 }
 
+export function encodeBase64Bytes(bytes: Uint8Array): string {
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
 export function decodeBase64Bytes(value: string): Uint8Array {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);

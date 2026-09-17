@@ -1,6 +1,7 @@
 import type { AuthMessage } from './auth';
 import {
   decodeBase64Bytes,
+  encodeBase64Bytes,
   parseRelayMessage,
   type AuthResultMsg,
   type ChatBroadcastMsg,
@@ -154,7 +155,7 @@ export class RelayClient {
   }
 
   sendInput(bytes: Uint8Array): void {
-    this.socket?.send(JSON.stringify({ v: 1, type: 'input', data_base64: bytesToBase64(bytes) }));
+    this.socket?.send(JSON.stringify({ v: 1, type: 'input', data_base64: encodeBase64Bytes(bytes) }));
   }
 
   sendTakeControl(): void {
@@ -165,14 +166,4 @@ export class RelayClient {
     this.socket?.close();
     this.socket = null;
   }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
 }
