@@ -117,11 +117,11 @@ Viewer                          Relay                          Host CLI
    sole issuer.
 7. On `ok:false`, relay increments the `(session_id, remote_address)`
    failure counter. At the configured threshold
-   (`RATE_LIMIT_MAX_ATTEMPTS`, suggested default 5 — confirm before Task
-   B5) further attempts get `RATE_LIMITED` without contacting the host
-   until the cooldown (`RATE_LIMIT_COOLDOWN_MS`, suggested 60000) expires.
-   The connection is **not** closed on rate limit — the viewer stays
-   connected and can see the cooldown countdown.
+   (`RATE_LIMIT_MAX_ATTEMPTS` = 5) further attempts get `RATE_LIMITED`
+   without contacting the host until the cooldown
+   (`RATE_LIMIT_COOLDOWN_MS` = 60000) expires. The connection is **not**
+   closed on rate limit — the viewer stays connected and can see the
+   cooldown countdown.
 
 ## Rate limiting
 
@@ -141,7 +141,7 @@ reassigns the active writer and broadcasts `control_changed`.
 **Host `take_control` is authoritative and starts a short lock window.**
 When the host sends `take_control`, the relay reassigns immediately *and*
 rejects any non-host `take_control` received within
-`HOST_LOCK_WINDOW_MS` (suggested 2000ms) afterward, responding
+`HOST_LOCK_WINDOW_MS` (2000ms) afterward, responding
 `error{code:"NOT_ACTIVE_WRITER", message:"host recently reclaimed
 control"}` to the rejected sender instead of reassigning. This is what
 makes "the host always has an instant override" actually true — without
@@ -180,10 +180,9 @@ after launch.
 
 A viewer that briefly loses network sends `resume{token}` instead of
 `auth{...}`. If the relay-issued token is still valid (session alive, not
-invalidated by a kill switch, within `RECONNECT_WINDOW_MS` — suggested
-30000, confirm before Task B8) the relay responds `auth_result{ok:true}`
-immediately — no host round-trip, since the relay itself is the token's
-issuer and authority.
+invalidated by a kill switch, within `RECONNECT_WINDOW_MS` = 30000) the
+relay responds `auth_result{ok:true}` immediately — no host round-trip,
+since the relay itself is the token's issuer and authority.
 
 ## Limits
 
@@ -442,12 +441,19 @@ interface ErrorMsg extends Envelope {
 Reconnect resilience (non-functional requirement) is covered by `resume`
 and the relay-issued token.
 
-## Open items for whoever implements each side
+## Constants (confirmed)
 
-- `RATE_LIMIT_MAX_ATTEMPTS` (suggested 5), `RATE_LIMIT_COOLDOWN_MS`
-  (suggested 60000), `RECONNECT_WINDOW_MS` (suggested 30000),
-  `HOST_LOCK_WINDOW_MS` (suggested 2000) — confirm before Tasks B5/B6/B8.
+| Constant | Value |
+|---|---|
+| `RATE_LIMIT_MAX_ATTEMPTS` | 5 |
+| `RATE_LIMIT_COOLDOWN_MS` | 60000 |
+| `RECONNECT_WINDOW_MS` | 30000 |
+| `HOST_LOCK_WINDOW_MS` | 2000 |
+
+## Remaining open item
+
 - Exact ECDH/AEAD primitives (recommend Go `crypto/ecdh` P-256 +
   `crypto/cipher` AES-GCM, and browser `SubtleCrypto` with matching
-  parameters) — confirm both sides can interoperate with a small
-  round-trip test before building the full auth flow on top of it.
+  parameters) — this is a verification step for Task B5/F3, not a
+  decision: confirm both sides interoperate with a small round-trip test
+  before building the full auth flow on top of it.

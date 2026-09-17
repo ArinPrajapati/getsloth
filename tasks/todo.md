@@ -6,9 +6,9 @@ This file is the checkbox tracker.
 ## Phase 0: Shared Contract
 - [x] T0: Define and document the WebSocket protocol (`docs/protocol.md`)
 
-**Checkpoint:** contract approved by founder before Phase 1 starts. ⏳ awaiting review.
+**Checkpoint:** contract approved by founder before Phase 1 starts. ✅ reviewed (Pi caught a real auth-transport bug, fixed), constants confirmed, agent split assigned — Phase 1 can start.
 
-## Phase 1A: Backend (Go) — CLI + Relay
+## Phase 1A: Backend (Go) — CLI + Relay — assigned to Claude
 - [ ] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
 - [ ] B2: PTY wrapping — `getsloth <command>` works standalone
 - [ ] B3: Relay server skeleton — sessions, host + viewer connect
@@ -23,7 +23,7 @@ This file is the checkbox tracker.
 
 **Checkpoint:** Backend feature-complete.
 
-## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer
+## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
 - [ ] F1: Project scaffold + tooling wired to CONSTRAINTS.md
 - [ ] F2: WebSocket client + xterm.js live render
 - [ ] F3: Password gate UI
@@ -44,15 +44,18 @@ This file is the checkbox tracker.
 ## Phase 3: Launch Prep
 - [ ] L1: LICENSE file (AGPL-3.0)
 - [ ] L2: README
-- [ ] L3: Deploy the hosted relay
+- [ ] L3: Deploy — Frontend to Vercel, relay to founder-provided server (bare-bones)
 - [ ] L4: Demo capture (phone, in bed, matching the actual pitch)
 - [ ] L5: Go public — push repo public, publish launch post
 
 **Checkpoint:** Shipped. Traction-test milestone — nothing beyond v0 until
 this signal is in.
 
+## Resolved
+- Agent split: Claude = Backend, Pi = Frontend
+- Reconnect window: 30s, rate-limit threshold: 5 attempts (see docs/protocol.md)
+- Hosting: Frontend → Vercel, relay → founder-provided server (bare-bones)
+
 ## Open Questions (need founder input)
-- Which agent (Claude or Pi) takes Backend vs Frontend
-- Reconnect window (placeholder: 30s)
-- Rate-limit threshold (placeholder: 5 attempts)
-- Relay hosting provider for L3 (not yet decided)
+- Relay server credentials — needed before Task L3's relay deploy, doesn't
+  block Backend build/test work

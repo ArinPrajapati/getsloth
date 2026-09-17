@@ -583,17 +583,28 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 1 file
 
-- [ ] **Task L3: Deploy the hosted relay**
+- [ ] **Task L3: Deploy — Frontend to Vercel, relay to the founder's server**
 
-  **Description:** Deploy `internal/relay` to the chosen host, point
-  `relay.getsloth.dev` (or whatever subdomain) at it, confirm the default
-  CLI onboarding path (no self-hosting required) works publicly.
+  **Description:** Two separate deploy targets, decided above:
+  - Frontend (`web/`) deploys to Vercel — standard static/SPA deploy, no
+    special config expected.
+  - `internal/relay` deploys to a server the founder provides credentials
+    for — bare-bones (plain process/systemd or similar, not a managed
+    PaaS). Point `relay.getsloth.dev` (or whatever subdomain) at it, and
+    the Frontend's WebSocket client config at that same address. Confirm
+    the default CLI onboarding path (no self-hosting required) works
+    publicly.
 
   **Acceptance criteria:**
+  - [ ] Frontend is reachable at its Vercel URL (or a custom domain
+        pointed at it)
   - [ ] `getsloth <command>` from a machine with no special config reaches
-        the public relay and produces a working shareable link
+        the public relay and produces a working shareable link that opens
+        the Vercel-hosted viewer
 
-  **Dependencies:** I2
+  **Dependencies:** I2, and separately, founder providing relay server
+  access (currently blocking only the relay half of this task, not the
+  Frontend half or any earlier Backend work)
 
   **Files:** deployment config (e.g. `deploy/`, CI workflow if used)
 
@@ -639,11 +650,22 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 | Relay hosting/deploy (L3) takes longer than expected, eating into Friday | Medium | L3 doesn't depend on L1/L2/L4, can start as soon as I1 is stable rather than waiting for full Phase 2 sign-off |
 | Two agents (Claude, Pi) interpret CONSTRAINTS.md differently | Medium | Tooling (gofmt/tsc/eslint/gitleaks) is the enforcement, not agent judgment — see CONSTRAINTS.md notes; agent-session logs (Task convention already set up) surface drift for founder review |
 
+## Decisions (previously open)
+
+- **Agent split:** Claude takes Backend (Go CLI + relay, Phase 1A). Pi
+  takes Frontend (TypeScript + xterm.js viewer, Phase 1B).
+- **Hosting, split in two:** the Frontend (Task L3's web-viewer half)
+  deploys to **Vercel**. The relay (Task L3's WebSocket-server half)
+  deploys to a **server the founder will provide credentials for later —
+  bare-bones only**, not a managed platform like Fly.io/Railway. Task L3
+  in `tasks/plan.md` should be read as two deploy targets, not one, until
+  those credentials arrive.
+- **Protocol constants confirmed** (see `docs/protocol.md`):
+  `RATE_LIMIT_MAX_ATTEMPTS` = 5, `RATE_LIMIT_COOLDOWN_MS` = 60000,
+  `RECONNECT_WINDOW_MS` = 30000, `HOST_LOCK_WINDOW_MS` = 2000.
+
 ## Open Questions
 
-- Which agent (Claude or Pi) takes Backend vs Frontend — founder's call, not
-  a technical dependency either way.
-- Exact reconnect window (B8 suggests 30s as a placeholder) — confirm.
-- Exact rate-limit threshold (B5 suggests 5 attempts) — confirm.
-- Relay hosting provider for L3 — not yet decided (Fly.io/Railway/Render are
-  reasonable Go-friendly options, not evaluated here).
+- Relay server credentials/access — founder to provide before Task L3's
+  relay half can actually be executed (Backend build/test work isn't
+  blocked by this, only the final deploy step).
