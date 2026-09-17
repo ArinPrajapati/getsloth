@@ -46,4 +46,60 @@ viewer/session screen. The screen the host is using to watch/control a
 live session stays free of brand dressing; that's for where we're selling
 the product, not where someone's trying to see their terminal.
 
+## Decisions (founder, 2026-09-17)
+
+Three decisions handed down, recorded here as-is — locked, not up for
+reinterpretation during the UX pass.
+
+### 1. No kill switch in the participant-facing frontend
+
+The kill switch is never exposed in the web/terminal viewer, for this
+version. Reason: if a participant could remotely trigger it, the server
+could shut down while that same server is their only means of access —
+once disconnected, they may have no way to reconnect or recover the
+session.
+
+- No kill-switch control anywhere in the web viewer, now or by accident
+  later.
+- Kill switch stays available only from the machine/environment where the
+  session was originally started (the host CLI) — this already matches
+  `docs/protocol.md`: `KillSwitchMsg` is host→relay only, never a message a
+  viewer can send.
+- Remote kill-switch functionality can be reconsidered in a later version
+  if a concrete use case demands it, and only with real permissions and
+  safeguards against accidental or unauthorized shutdowns.
+
+This is a constraint on future work as much as a note on current work —
+nobody should add a "kill session" button to the viewer without revisiting
+this decision explicitly.
+
+### 2. Status bar — tmux-style, the main control surface
+
+The frontend should follow a tmux status-bar approach: one persistent bar
+that's the main control area for the session, not scattered buttons/cards
+across the interface. This is the concrete shape for the "YouTube control
+bar" idea above — a single bar, not a floating button cluster.
+
+The status bar holds:
+- Session status
+- Connection/server status
+- Chat and messaging
+- Notifications
+- Other frequently used session actions
+
+### 3. Chat lives in the status bar, with a notification state
+
+Chat is reached through the status bar, not a separate always-open panel.
+
+- New message arrives → the chat/message icon shows a notification or
+  highlighted state, so the participant knows immediately without having
+  the panel open.
+- Clicking the icon/notification opens the messaging interface.
+- The participant reads and replies without leaving the main working
+  view — chat is an overlay/sheet over the terminal, not a navigation away
+  from it.
+
+Net effect: interface stays compact, controls and communication stay
+reachable, without ever interrupting the primary "watch the terminal" job.
+
 Revisit this whole note when starting the actual UX pass.
