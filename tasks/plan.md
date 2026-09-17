@@ -322,7 +322,7 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Small: 4-5 files
 
-- [ ] **Task F2: WebSocket client + xterm.js live render**
+- [x] **Task F2: WebSocket client + xterm.js live render**
 
   **Description:** Connect to the relay per T0's protocol, render incoming
   `output` messages into an xterm.js instance. Build against a mock relay

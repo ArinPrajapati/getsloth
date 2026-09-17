@@ -1,0 +1,104 @@
+import { RelayClient, type ConnectionState } from './ws-client';
+
+class FakeSocket {
+  static created: FakeSocket[] = [];
+
+  onopen: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+
+  readonly sent: string[] = [];
+  readonly url: string;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeSocket.created.push(this);
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.onclose?.(new CloseEvent('close'));
+  }
+
+  emit(data: unknown): void {
+    this.onmessage?.({ data: String(data) } as MessageEvent<string>);
+  }
+}
+
+describe('RelayClient', () => {
+  beforeEach(() => {
+    FakeSocket.created = [];
+  });
+
+  it('reports connection state changes', () => {
+    const states: ConnectionState[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: (state) => states.push(state),
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.onopen?.(new Event('open'));
+    FakeSocket.created[0]?.onclose?.(new CloseEvent('close'));
+
+    expect(states).toEqual(['connecting', 'connected', 'disconnected']);
+  });
+
+  it('emits decoded terminal bytes from output messages', () => {
+    const chunks: number[][] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: (bytes) => chunks.push([...bytes]),
+      onErrorMessage: () => undefined
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'output', data_base64: 'SGkNCg==' }));
+
+    expect(chunks).toEqual([[72, 105, 13, 10]]);
+  });
+
+  it('surfaces relay error messages without throwing', () => {
+    const errors: string[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: (message) => errors.push(message)
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'error', code: 'SESSION_NOT_FOUND', message: 'No session' }));
+
+    expect(errors).toEqual(['No session']);
+  });
+
+  it('surfaces transport errors and can disconnect explicitly', () => {
+    const states: ConnectionState[] = [];
+    const errors: string[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: (state) => states.push(state),
+      onOutput: () => undefined,
+      onErrorMessage: (message) => errors.push(message)
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.onerror?.(new Event('error'));
+    client.disconnect();
+
+    expect(errors).toEqual(['Connection failed']);
+    expect(states).toEqual(['connecting', 'disconnected']);
+  });
+});

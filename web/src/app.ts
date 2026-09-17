@@ -31,9 +31,20 @@ export function renderAppShell(root: HTMLElement): void {
   statusLabel.textContent = 'Waiting for session';
 
   const statusText = document.createElement('p');
+  statusText.setAttribute('aria-label', 'Connection status');
   statusText.textContent = 'Open a getsloth share link to connect to a live PTY stream.';
 
   status.append(statusLabel, statusText);
-  main.append(header, status);
+
+  const terminal = document.createElement('section');
+  terminal.className = 'terminal-card';
+  terminal.setAttribute('aria-label', 'Terminal output');
+
+  const terminalSurface = document.createElement('div');
+  terminalSurface.className = 'terminal-surface';
+  terminalSurface.dataset.terminal = 'true';
+
+  terminal.append(terminalSurface);
+  main.append(header, status, terminal);
   root.append(main);
 }

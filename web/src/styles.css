@@ -66,18 +66,32 @@ h1 {
   line-height: 1.5;
 }
 
-.status-card {
-  max-width: 34rem;
-  padding: 1.25rem;
+.status-card,
+.terminal-card {
   border: 1px solid #3c342b;
   border-radius: 1rem;
   background: #1d1915;
+}
+
+.status-card {
+  max-width: 34rem;
+  padding: 1.25rem;
 }
 
 .status-card p:last-child {
   margin: 0.5rem 0 0;
   color: #b9afa2;
   line-height: 1.5;
+}
+
+.terminal-card {
+  min-height: 22rem;
+  overflow: hidden;
+}
+
+.terminal-surface {
+  min-height: 22rem;
+  padding: 1rem;
 }
 
 @media (min-width: 768px) {
