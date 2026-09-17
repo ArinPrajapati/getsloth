@@ -59,7 +59,7 @@ accidentally violate, not just a promise in prose.
 
 | ID | Rule | Path | Reason | Owner | Expires |
 |---|---|---|---|---|---|
-| — | none yet | — | — | — | — |
+| W1 | gitleaks `generic-api-key` | `cmd/getsloth/password.go:11` | `passwordAlphabet` is a public character set for generating passwords, not a secret - gitleaks' entropy heuristic flags any random-looking string, same as it would a real key. Allowlisted by fingerprint in `.gitleaksignore`, not an inline suppression - the string itself stays visible in source. | @claude (Backend) | No expiry - this is a structural false positive on a constant that will keep looking the same, not a temporary situation |
 
 ## Notes on enforcement
 

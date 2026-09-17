@@ -133,6 +133,44 @@ const (
 	AuthCodeRateLimited = "RATE_LIMITED"
 )
 
+// InputMsg is a viewer's keystrokes (or a translated mobile quick
+// action), sent viewer -> relay. Only applied to the PTY if the sender
+// is the current active writer - otherwise silently dropped by the
+// relay, never forwarded to the host.
+type InputMsg struct {
+	Envelope
+	DataBase64 string `json:"data_base64"`
+}
+
+// InputForwardMsg is the relay forwarding an approved viewer input to
+// the host, once the relay has confirmed the sender is the active
+// writer - the host trusts this without re-checking, since the relay is
+// the sole authority on active-writer state. Never sent for the host's
+// own keystrokes, which reach the PTY directly without touching the
+// network - see docs/protocol.md's "Host's own input never touches the
+// network".
+type InputForwardMsg struct {
+	Envelope
+	DataBase64 string `json:"data_base64"`
+	SenderID   string `json:"sender_id"`
+}
+
+// TakeControlMsg requests the sender become the active writer - sent by
+// either the host or a viewer, host or viewer alike. Relay reassigns
+// immediately; a host-originated one is additionally authoritative for
+// HostLockWindow, per docs/protocol.md's Control model.
+type TakeControlMsg struct {
+	Envelope
+}
+
+// ControlChangedMsg is broadcast to every connection (host and every
+// authenticated viewer) whenever the active writer changes.
+type ControlChangedMsg struct {
+	Envelope
+	ActiveWriterID   string `json:"active_writer_id"`
+	ActiveWriterRole string `json:"active_writer_role"`
+}
+
 // Custom WebSocket close codes, application range per RFC 6455. See
 // docs/protocol.md's "Socket lifecycle" section.
 const (

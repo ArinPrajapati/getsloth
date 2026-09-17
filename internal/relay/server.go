@@ -103,6 +103,13 @@ func (s *Server) handleHostMessage(session *Session, raw []byte) {
 			return
 		}
 		s.handleAuthResponse(session, msg)
+	case "take_control":
+		session.mu.Lock()
+		host := session.host
+		session.mu.Unlock()
+		if host != nil {
+			s.handleTakeControl(session, host)
+		}
 	}
 }
 

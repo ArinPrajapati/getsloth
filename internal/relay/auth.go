@@ -32,8 +32,13 @@ func (s *Server) handleViewerMessage(session *Session, conn *Connection, remoteA
 			})
 			return
 		}
-		// Other authenticated-only message types (input, take_control,
-		// chat_message, kill_switch, ...) are handled starting in B6.
+		switch env.Type {
+		case "take_control":
+			s.handleTakeControl(session, conn)
+		case "input":
+			s.handleInput(session, conn, raw)
+		}
+		// chat_message, kill_switch arrive in later tasks.
 	}
 }
 

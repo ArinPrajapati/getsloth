@@ -47,7 +47,8 @@ func TestRelayOutputWriter_ChunksLargeWritesAndReachesViewer(t *testing.T) {
 		t.Fatalf("NewKeyPair: %v", err)
 	}
 	const password = "chunk-test-password"
-	go listenForAuthRequests(ws, created.SessionID, password, keys)
+	active, ptmxCh := dummyControlState()
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {

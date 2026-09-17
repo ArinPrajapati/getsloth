@@ -4,21 +4,31 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"sync"
+	"time"
 
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
+
+// HostLockWindow is the confirmed constant from docs/protocol.md: after
+// the host reclaims control, a non-host take_control is rejected for
+// this long, so a viewer's request racing in right after can't silently
+// undo the reclaim.
+const HostLockWindow = 2 * time.Second
 
 // Session represents one running getsloth host and its connected
 // viewers.
 type Session struct {
 	ID string
 
-	mu          sync.Mutex
-	host        *Connection
-	viewers     map[string]*Connection
-	closed      bool
-	pendingAuth map[string]pendingAuth // requestID -> the viewer awaiting a verdict
-	tokens      map[string]string      // relay-issued token -> the connection_id it authenticates
+	mu               sync.Mutex
+	host             *Connection
+	viewers          map[string]*Connection
+	closed           bool
+	pendingAuth      map[string]pendingAuth // requestID -> the viewer awaiting a verdict
+	tokens           map[string]string      // relay-issued token -> the connection_id it authenticates
+	activeWriterID   string                 // starts "host"
+	activeWriterRole string                 // starts "host"
+	lastHostReclaim  time.Time
 }
 
 // pendingAuth tracks a viewer's auth attempt while it's awaiting the
@@ -128,10 +138,12 @@ func (r *Registry) Create() (*Session, error) {
 		return nil, err
 	}
 	s := &Session{
-		ID:          id,
-		viewers:     map[string]*Connection{},
-		pendingAuth: map[string]pendingAuth{},
-		tokens:      map[string]string{},
+		ID:               id,
+		viewers:          map[string]*Connection{},
+		pendingAuth:      map[string]pendingAuth{},
+		tokens:           map[string]string{},
+		activeWriterID:   "host",
+		activeWriterRole: "host",
 	}
 	r.mu.Lock()
 	r.sessions[id] = s

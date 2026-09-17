@@ -1,0 +1,9 @@
+# False positives, documented in CONSTRAINTS.md's Exceptions table.
+# Each entry is a gitleaks fingerprint, not a value - the actual string
+# stays visible in source; this only tells gitleaks it's been reviewed.
+
+# W1: cmd/getsloth/password.go's passwordAlphabet - a public character
+# set for generating passwords, not a secret. Flagged by gitleaks'
+# entropy heuristic (generic-api-key rule) because a random-looking
+# character list has high entropy, same as a real key would.
+f9ead59f2bfde6d9ab1a55a8ae3ca2edad11f0a6:cmd/getsloth/password.go:generic-api-key:11

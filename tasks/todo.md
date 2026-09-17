@@ -24,7 +24,7 @@ end-to-end with real binaries (not just unit tests) — measured ~1-2ms
 output latency, well under the 300ms target.
 
 - [x] B5: Password auth — local verification + rate limiting
-- [ ] B6: Control handoff — single active writer + host override
+- [x] B6: Control handoff — single active writer + host override
 - [ ] B7: Kill switch
 - [ ] B8: Session teardown + reconnect resilience
 

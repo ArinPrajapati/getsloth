@@ -9,7 +9,9 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http/httptest"
+	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,7 +27,7 @@ import (
 // packages - deliberately duplicated from
 // internal/hostauth/hostauth_test.go rather than shared, because the
 // point is to exercise interop through the real production code path
-// (connectHost, listenForAuthRequests) end to end, the same way a
+// (connectHost, runHostMessageLoop) end to end, the same way a
 // genuinely separate client implementation (e.g. Pi's TypeScript
 // frontend) would have to.
 func encryptAsViewer(t *testing.T, hostPubkeyBase64URL, sessionID, password string) (viewerPubBase64, ciphertextBase64 string) {
@@ -78,6 +80,19 @@ func encryptAsViewer(t *testing.T, hostPubkeyBase64URL, sessionID, password stri
 		base64.StdEncoding.EncodeToString(blob)
 }
 
+// dummyControlState provides a runHostMessageLoop with the plumbing
+// B6's control tests need but auth-focused tests don't exercise: an
+// always-active writer flag and a ptmx channel pre-filled with nil,
+// safe as long as the test never sends an "input" message (which would
+// try to write through it).
+func dummyControlState() (*atomic.Bool, chan *os.File) {
+	active := &atomic.Bool{}
+	active.Store(true)
+	ptmxCh := make(chan *os.File, 1)
+	ptmxCh <- nil
+	return active, ptmxCh
+}
+
 func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 	srv := relay.NewServer()
 	ts := httptest.NewServer(srv.Handler())
@@ -95,7 +110,8 @@ func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 		t.Fatalf("NewKeyPair: %v", err)
 	}
 	const password = "correct-horse-battery-staple"
-	go listenForAuthRequests(ws, created.SessionID, password, keys)
+	active, ptmxCh := dummyControlState()
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
@@ -138,7 +154,8 @@ func TestFullAuthFlow_WrongPassword_Rejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewKeyPair: %v", err)
 	}
-	go listenForAuthRequests(ws, created.SessionID, "the-real-password", keys)
+	active, ptmxCh := dummyControlState()
+	go runHostMessageLoop(ws, created.SessionID, "the-real-password", keys, active, ptmxCh)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {

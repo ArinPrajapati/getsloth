@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync/atomic"
 
 	"github.com/arinprajapati/getsloth/internal/hostauth"
 )
@@ -34,13 +35,17 @@ func main() {
 	}
 
 	stdout := io.Writer(os.Stdout)
+	var isActiveWriter *atomic.Bool
+	var onPTYReady func(*os.File)
 
 	ws, created, err := connectHost(relayURL)
 	if err != nil {
 		// Degrade to local-only rather than fail the whole command - a
 		// command wrapped by getsloth should still work exactly like
 		// running it directly (B2's guarantee) even if nobody can watch
-		// it right now.
+		// it right now. No relay connection means no shared control
+		// concept to gate against, so isActiveWriter/onPTYReady stay
+		// nil - run() treats that as "always active."
 		fmt.Fprintf(os.Stderr, "getsloth: could not reach relay at %s: %v\n", relayURL, err)
 		fmt.Fprintln(os.Stderr, "getsloth: continuing locally only - nobody can watch this session")
 	} else {
@@ -59,9 +64,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL()))
 		fmt.Fprintf(os.Stderr, "getsloth: password: %s\n", password)
 
-		go listenForAuthRequests(ws, created.SessionID, password, keys)
+		active := &atomic.Bool{}
+		active.Store(true) // host starts as the active writer
+		isActiveWriter = active
+
+		ptmxCh := make(chan *os.File, 1)
+		onPTYReady = func(f *os.File) { ptmxCh <- f }
+
+		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
 	}
 
-	os.Exit(run(os.Args[1:], os.Stdin, stdout))
+	os.Exit(run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady))
 }
