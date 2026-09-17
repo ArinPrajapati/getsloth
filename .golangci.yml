@@ -1,0 +1,14 @@
+version: "2"
+
+linters:
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        relay-must-not-import-hostauth:
+          files:
+            - "**/internal/relay/**"
+          deny:
+            - pkg: "github.com/arinprajapati/getsloth/internal/hostauth"
+              desc: "internal/relay must never import password-comparison logic — see CONSTRAINTS.md"

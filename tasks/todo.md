@@ -14,7 +14,7 @@ final non-blocking clarifications (reconnect/active-writer interaction,
 token format). Phase 1 can start.
 
 ## Phase 1A: Backend (Go) — CLI + Relay — assigned to Claude
-- [ ] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
+- [x] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
 - [ ] B2: PTY wrapping — `getsloth <command>` works standalone
 - [ ] B3: Relay server skeleton — sessions, host + viewer connect
 - [ ] B4: Live output streaming (host → relay → viewer)
