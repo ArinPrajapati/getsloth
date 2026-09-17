@@ -1,11 +1,13 @@
 package relay
 
 import (
+	"encoding/base64"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -40,7 +42,7 @@ func TestHostConnect_CreatesSessionAndReceivesSessionCreated(t *testing.T) {
 
 	host := dial(t, base+"/ws/host")
 
-	var msg SessionCreatedMsg
+	var msg protocol.SessionCreatedMsg
 	readMsg(t, host, &msg)
 
 	if msg.Type != "session_created" {
@@ -59,11 +61,11 @@ func TestTwoHostConnections_GetDifferentSessions(t *testing.T) {
 	defer cleanup()
 
 	host1 := dial(t, base+"/ws/host")
-	var msg1 SessionCreatedMsg
+	var msg1 protocol.SessionCreatedMsg
 	readMsg(t, host1, &msg1)
 
 	host2 := dial(t, base+"/ws/host")
-	var msg2 SessionCreatedMsg
+	var msg2 protocol.SessionCreatedMsg
 	readMsg(t, host2, &msg2)
 
 	if msg1.SessionID == msg2.SessionID {
@@ -77,14 +79,14 @@ func TestViewerConnect_UnknownSession_GetsCleanRejection(t *testing.T) {
 
 	viewer := dial(t, base+"/ws/viewer/does-not-exist")
 
-	var msg ErrorMsg
+	var msg protocol.ErrorMsg
 	readMsg(t, viewer, &msg)
 
 	if msg.Type != "error" {
 		t.Errorf("type = %q, want error", msg.Type)
 	}
-	if msg.Code != ErrSessionNotFound {
-		t.Errorf("code = %q, want %q", msg.Code, ErrSessionNotFound)
+	if msg.Code != protocol.ErrSessionNotFound {
+		t.Errorf("code = %q, want %q", msg.Code, protocol.ErrSessionNotFound)
 	}
 
 	// The relay must then close the socket, not leave it hanging open.
@@ -99,7 +101,7 @@ func TestViewerConnect_KnownSession_Succeeds(t *testing.T) {
 	defer cleanup()
 
 	host := dial(t, base+"/ws/host")
-	var created SessionCreatedMsg
+	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
@@ -122,7 +124,7 @@ func TestHostDisconnect_TearsDownSessionAndDisconnectsViewers(t *testing.T) {
 	defer cleanup()
 
 	host := dial(t, base+"/ws/host")
-	var created SessionCreatedMsg
+	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 
 	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
@@ -135,13 +137,86 @@ func TestHostDisconnect_TearsDownSessionAndDisconnectsViewers(t *testing.T) {
 		t.Fatalf("closing host connection: %v", err)
 	}
 
-	var ended SessionEndedMsg
+	var ended protocol.SessionEndedMsg
 	readMsg(t, viewer, &ended)
 
 	if ended.Type != "session_ended" {
 		t.Errorf("type = %q, want session_ended", ended.Type)
 	}
-	if ended.Reason != ReasonHostDisconnected {
-		t.Errorf("reason = %q, want %q", ended.Reason, ReasonHostDisconnected)
+	if ended.Reason != protocol.ReasonHostDisconnected {
+		t.Errorf("reason = %q, want %q", ended.Reason, protocol.ReasonHostDisconnected)
+	}
+}
+
+func TestOutput_ReachesViewer_NotHost(t *testing.T) {
+	base, cleanup := newTestServer(t)
+	defer cleanup()
+
+	host := dial(t, base+"/ws/host")
+	var created protocol.SessionCreatedMsg
+	readMsg(t, host, &created)
+
+	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
+	time.Sleep(50 * time.Millisecond) // let the viewer registration land
+
+	if err := host.WriteJSON(protocol.OutputMsg{
+		Envelope:   protocol.NewEnvelope("output"),
+		DataBase64: base64.StdEncoding.EncodeToString([]byte("hello")),
+	}); err != nil {
+		t.Fatalf("host WriteJSON: %v", err)
+	}
+
+	var got protocol.OutputMsg
+	readMsg(t, viewer, &got)
+
+	data, err := base64.StdEncoding.DecodeString(got.DataBase64)
+	if err != nil {
+		t.Fatalf("decoding received output: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Errorf("viewer received %q, want %q", data, "hello")
+	}
+
+	// The host must NOT receive its own output echoed back - it already
+	// has this locally from its own PTY. A short read with a deadline
+	// confirms nothing arrives.
+	_ = host.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	if _, _, err := host.ReadMessage(); err == nil {
+		t.Error("host received a message back, expected none (output must not echo to host)")
+	}
+}
+
+func TestOutput_PreservesOrderAcrossManyRapidChunks(t *testing.T) {
+	base, cleanup := newTestServer(t)
+	defer cleanup()
+
+	host := dial(t, base+"/ws/host")
+	var created protocol.SessionCreatedMsg
+	readMsg(t, host, &created)
+
+	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
+	time.Sleep(50 * time.Millisecond)
+
+	const n = 200
+	for i := 0; i < n; i++ {
+		msg := protocol.OutputMsg{
+			Envelope:   protocol.NewEnvelope("output"),
+			DataBase64: base64.StdEncoding.EncodeToString([]byte{byte(i)}),
+		}
+		if err := host.WriteJSON(msg); err != nil {
+			t.Fatalf("host WriteJSON #%d: %v", i, err)
+		}
+	}
+
+	for i := 0; i < n; i++ {
+		var got protocol.OutputMsg
+		readMsg(t, viewer, &got)
+		data, err := base64.StdEncoding.DecodeString(got.DataBase64)
+		if err != nil {
+			t.Fatalf("decoding chunk #%d: %v", i, err)
+		}
+		if len(data) != 1 || data[0] != byte(i) {
+			t.Fatalf("chunk #%d = %v, want [%d] - output arrived out of order", i, data, i)
+		}
 	}
 }

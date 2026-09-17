@@ -1,9 +1,11 @@
 package relay
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
+	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -46,7 +48,7 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 
 	session, err := s.registry.Create()
 	if err != nil {
-		conn.closeWithCode(CloseBadRequest, "could not create session")
+		conn.closeWithCode(protocol.CloseBadRequest, "could not create session")
 		return
 	}
 
@@ -54,8 +56,8 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 	session.host = conn
 	session.mu.Unlock()
 
-	if err := conn.writeJSON(SessionCreatedMsg{
-		Envelope:     newEnvelope("session_created"),
+	if err := conn.writeJSON(protocol.SessionCreatedMsg{
+		Envelope:     protocol.NewEnvelope("session_created"),
 		SessionID:    session.ID,
 		ConnectionID: "host",
 	}); err != nil {
@@ -63,17 +65,38 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Block until the host disconnects. Message handling (auth_response,
-	// output, take_control, ...) arrives in later tasks - B3 only needs
-	// to detect the disconnect and tear the session down.
+	// Block until the host disconnects, dispatching each message as it
+	// arrives. Only "output" is handled so far (B4); auth_response,
+	// take_control, kill_switch, chat_message, end_session arrive in
+	// later tasks.
 	for {
-		if _, _, err := ws.ReadMessage(); err != nil {
+		_, raw, err := ws.ReadMessage()
+		if err != nil {
 			break
 		}
+		handleHostMessage(session, raw)
 	}
 
-	session.teardown(ReasonHostDisconnected)
+	session.teardown(protocol.ReasonHostDisconnected)
 	s.registry.remove(session.ID)
+}
+
+// handleHostMessage decodes one message from the host connection and
+// acts on it.
+func handleHostMessage(session *Session, raw []byte) {
+	var env protocol.Envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return
+	}
+
+	switch env.Type {
+	case "output":
+		var msg protocol.OutputMsg
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			return
+		}
+		session.broadcastOutput(msg.DataBase64)
+	}
 }
 
 func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
@@ -87,28 +110,28 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 	conn := newConnection(ws)
 
 	if !ok {
-		_ = conn.writeJSON(ErrorMsg{
-			Envelope: newEnvelope("error"),
-			Code:     ErrSessionNotFound,
+		_ = conn.writeJSON(protocol.ErrorMsg{
+			Envelope: protocol.NewEnvelope("error"),
+			Code:     protocol.ErrSessionNotFound,
 			Message:  "no session with this id",
 		})
-		conn.closeWithCode(CloseSessionNotFound, "session_not_found")
+		conn.closeWithCode(protocol.CloseSessionNotFound, "session_not_found")
 		return
 	}
 
 	viewerID, err := newRandomID()
 	if err != nil {
-		conn.closeWithCode(CloseBadRequest, "internal error")
+		conn.closeWithCode(protocol.CloseBadRequest, "internal error")
 		return
 	}
 
 	if !session.addViewer(viewerID, conn) {
-		_ = conn.writeJSON(ErrorMsg{
-			Envelope: newEnvelope("error"),
-			Code:     ErrSessionNotFound,
+		_ = conn.writeJSON(protocol.ErrorMsg{
+			Envelope: protocol.NewEnvelope("error"),
+			Code:     protocol.ErrSessionNotFound,
 			Message:  "session has ended",
 		})
-		conn.closeWithCode(CloseSessionNotFound, "session_not_found")
+		conn.closeWithCode(protocol.CloseSessionNotFound, "session_not_found")
 		return
 	}
 

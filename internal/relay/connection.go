@@ -25,9 +25,10 @@ func (c *Connection) writeJSON(v any) error {
 // closeWithCode sends a WebSocket close frame carrying the given
 // application close code, then closes the underlying connection. reason
 // is a short debugging string, not the JSON message body - callers that
-// need to send a typed message (ErrorMsg, SessionEndedMsg, ...) should
-// writeJSON it first and call closeWithCode after, per the "every other
-// relay-initiated close sends the relevant typed message first" rule.
+// need to send a typed message (protocol.ErrorMsg, protocol.SessionEndedMsg,
+// ...) should writeJSON it first and call closeWithCode after, per the
+// "every other relay-initiated close sends the relevant typed message
+// first" rule.
 func (c *Connection) closeWithCode(code int, reason string) {
 	_ = c.ws.WriteControl(
 		websocket.CloseMessage,

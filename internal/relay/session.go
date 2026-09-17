@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"sync"
+
+	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
 // Session represents one running getsloth host and its connected
@@ -64,11 +66,32 @@ func (s *Session) teardown(reason string) {
 	s.mu.Unlock()
 
 	for _, c := range viewers {
-		_ = c.writeJSON(SessionEndedMsg{
-			Envelope: newEnvelope("session_ended"),
+		_ = c.writeJSON(protocol.SessionEndedMsg{
+			Envelope: protocol.NewEnvelope("session_ended"),
 			Reason:   reason,
 		})
-		c.closeWithCode(CloseSessionEnded, "session_ended")
+		c.closeWithCode(protocol.CloseSessionEnded, "session_ended")
+	}
+}
+
+// broadcastOutput forwards a chunk of host output to every currently
+// connected viewer - and only viewers, never back to the host, which
+// already has this output locally from its own PTY (see
+// docs/protocol.md's "Relay -> viewers only" section).
+func (s *Session) broadcastOutput(dataBase64 string) {
+	s.mu.Lock()
+	viewers := make([]*Connection, 0, len(s.viewers))
+	for _, c := range s.viewers {
+		viewers = append(viewers, c)
+	}
+	s.mu.Unlock()
+
+	msg := protocol.OutputMsg{
+		Envelope:   protocol.NewEnvelope("output"),
+		DataBase64: dataBase64,
+	}
+	for _, c := range viewers {
+		_ = c.writeJSON(msg)
 	}
 }
 

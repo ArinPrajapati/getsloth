@@ -17,9 +17,11 @@ token format). Phase 1 can start.
 - [x] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
 - [x] B2: PTY wrapping — `getsloth <command>` works standalone
 - [x] B3: Relay server skeleton — sessions, host + viewer connect
-- [ ] B4: Live output streaming (host → relay → viewer)
+- [x] B4: Live output streaming (host → relay → viewer)
 
-**Checkpoint:** backend can stream, no auth/control yet.
+**Checkpoint:** backend can stream, no auth/control yet. ✅ Verified
+end-to-end with real binaries (not just unit tests) — measured ~1-2ms
+output latency, well under the 300ms target.
 
 - [ ] B5: Password auth — local verification + rate limiting
 - [ ] B6: Control handoff — single active writer + host override
