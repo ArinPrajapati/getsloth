@@ -290,20 +290,33 @@ textarea {
 }
 
 @media (max-width: 700px) {
-  .terminal-surface {
-    height: calc(100vh - 86px);
-  }
-
   .session-status-bar {
-    min-height: 86px;
-    grid-template-columns: 1fr;
+    min-height: 44px;
+    grid-template-columns: 44px minmax(0, 1fr);
   }
 
   .status-bar-session {
-    display: grid;
-    grid-template-columns: 1fr auto;
+    display: flex;
   }
 
+  .status-bar-item:first-child {
+    width: 44px;
+    justify-content: center;
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+  }
+
+  .status-bar-item:first-child::before {
+    width: 0.5625rem;
+    height: 0.5625rem;
+    box-shadow:
+      0 0 0 0.15rem rgba(127, 211, 123, 0.18),
+      0 0 0.75rem rgba(127, 211, 123, 0.7);
+  }
+
+  .status-bar-session .status-bar-item:not(:first-child),
   .status-bar-focus {
     display: none;
   }
@@ -311,16 +324,20 @@ textarea {
   .status-bar-actions {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-column: 2;
+    min-width: 0;
   }
 
   .status-bar-button {
     justify-content: center;
+    min-width: 0;
     padding: 0 0.5rem;
+    font-size: 0.75rem;
   }
 
   .viewer-overlays {
     right: 0;
-    bottom: 5.375rem;
+    bottom: 2.75rem;
     width: 100%;
   }
 
