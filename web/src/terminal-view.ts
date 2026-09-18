@@ -4,9 +4,11 @@ export interface TerminalLike {
   open(element: HTMLElement): void;
   write(data: Uint8Array): void;
   onData(handler: (data: string) => void): void;
+  focus?(): void;
 }
 
 export interface TerminalView {
+  focus(): void;
   write(bytes: Uint8Array): void;
   setActive(active: boolean): void;
 }
@@ -41,6 +43,9 @@ export function createTerminalView(
   });
 
   return {
+    focus(): void {
+      terminal.focus?.();
+    },
     write(bytes: Uint8Array): void {
       terminal.write(bytes);
     },

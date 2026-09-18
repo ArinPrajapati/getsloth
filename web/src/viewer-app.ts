@@ -3,7 +3,6 @@ import { createAuthGate } from './auth-gate';
 import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } from './auth';
 import { createChatPanel } from './chat-panel';
 import { createControlPanel } from './control-panel';
-import { createQuickActions } from './quick-actions';
 import { createSessionState } from './session-state';
 import { createTerminalView, type TerminalLike } from './terminal-view';
 import { RelayClient, type ConnectionState, type RelayClientOptions } from './ws-client';
@@ -33,8 +32,12 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const terminalCard = root.querySelector<HTMLElement>('[aria-label="Terminal output"]');
   const terminalElement = root.querySelector<HTMLElement>('[data-terminal]');
   const connectionStatus = root.querySelector<HTMLElement>('[aria-label="Connection status"]');
+  const activeWriterStatus = root.querySelector<HTMLElement>('[aria-label="Active writer status"]');
+  const chatOverlay = root.querySelector<HTMLElement>('[data-panel="chat"]');
+  const controlOverlay = root.querySelector<HTMLElement>('[data-panel="control"]');
+  const statusBar = root.querySelector<HTMLElement>('[aria-label="Session status bar"]');
 
-  if (!terminalCard || !terminalElement || !connectionStatus) {
+  if (!terminalCard || !terminalElement || !connectionStatus || !activeWriterStatus || !chatOverlay || !controlOverlay || !statusBar) {
     throw new Error('Viewer shell did not render required regions');
   }
 
@@ -48,34 +51,30 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const hostPublicKeyBase64Url = hostPublicKeyFromFragment(options.pageUrl);
 
   if (!websocketUrl) {
-    connectionStatus.textContent = 'Open a getsloth /s/{session_id} link to connect.';
+    connectionStatus.textContent = 'missing session';
     return null;
   }
 
   if (!hostPublicKeyBase64Url) {
-    connectionStatus.textContent = 'Share link is missing the host auth key.';
+    connectionStatus.textContent = 'missing auth key';
     return null;
   }
 
   const createClient = options.createClient ?? ((clientOptions) => new RelayClient(clientOptions));
   const sessionState = createSessionState(root);
   let localConnectionId: string | null = null;
-  const chatPanel = createChatPanel(root, {
+  const chatPanel = createChatPanel(chatOverlay, {
     onSend: (text) => {
       client.sendChatMessage(text);
     }
   });
-  const quickActions = createQuickActions(root, {
-    onInput: (bytes) => {
-      client.sendInput(bytes);
-    }
-  });
-  const controlPanel = createControlPanel(root, {
+  const controlPanel = createControlPanel(controlOverlay, {
     localConnectionId,
     onTakeControl: () => {
       client.sendTakeControl();
     }
   });
+  wireStatusBar(root, terminal);
   const gate = createAuthGate(root, {
     onSubmit: (submission) => {
       connectionStatus.textContent = 'Checking password…';
@@ -120,8 +119,8 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     onControlChanged: (control) => {
       controlPanel.updateControl(control);
       const isActiveWriter = control.active_writer_id === localConnectionId;
-      quickActions.setActive(isActiveWriter);
       terminal.setActive(isActiveWriter);
+      activeWriterStatus.textContent = isActiveWriter ? 'you driving' : `${roleLabel(control.active_writer_role)} driving`;
     },
     onPresence: (presence) => {
       controlPanel.updatePresence(presence.connections);
@@ -178,4 +177,39 @@ function statusTextFor(state: ConnectionState): string {
   }
 
   return 'Waiting for session';
+}
+
+function wireStatusBar(root: HTMLElement, terminal: ReturnType<typeof createTerminalView>): void {
+  const overlays = [...root.querySelectorAll<HTMLElement>('.viewer-overlay')];
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>('.status-bar-button[data-panel]')];
+
+  function showPanel(panelName: string | null): void {
+    for (const overlay of overlays) {
+      overlay.hidden = overlay.dataset.panel !== panelName;
+    }
+
+    for (const button of buttons) {
+      const isPressed = button.dataset.panel === panelName;
+      button.setAttribute('aria-pressed', String(isPressed));
+    }
+  }
+
+  for (const button of buttons) {
+    button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', () => {
+      if (button.dataset.panel === 'type') {
+        showPanel(null);
+        terminal.focus();
+        return;
+      }
+
+      const panelName = button.dataset.panel ?? null;
+      const shouldClose = panelName !== null && !root.querySelector<HTMLElement>(`.viewer-overlay[data-panel="${panelName}"]`)?.hidden;
+      showPanel(shouldClose ? null : panelName);
+    });
+  }
+}
+
+function roleLabel(role: 'host' | 'viewer'): string {
+  return role === 'host' ? 'host' : 'viewer';
 }

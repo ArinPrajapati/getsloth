@@ -9,10 +9,10 @@ export function createXtermTerminal(): TerminalLike {
     fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, monospace',
     fontSize: 14,
     theme: {
-      background: '#15120f',
-      foreground: '#f4efe7',
+      background: '#070808',
+      foreground: '#d7e2d1',
       cursor: '#f4efe7',
-      selectionBackground: '#6f624f'
+      selectionBackground: '#3b5f66'
     }
   });
 }

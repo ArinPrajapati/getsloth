@@ -5,6 +5,7 @@ import type { ConnectionState, RelayClientOptions } from './ws-client';
 
 class FakeTerminal implements TerminalLike {
   readonly writes: Uint8Array[] = [];
+  focusCalls = 0;
   private dataHandler: ((data: string) => void) | null = null;
 
   open(): void {
@@ -17,6 +18,10 @@ class FakeTerminal implements TerminalLike {
 
   onData(handler: (data: string) => void): void {
     this.dataHandler = handler;
+  }
+
+  focus(): void {
+    this.focusCalls += 1;
   }
 
   type(data: string): void {
@@ -96,10 +101,8 @@ describe('mountViewerApp', () => {
     root.querySelector<HTMLButtonElement>('[aria-label="Session control"] button')?.click();
     expect(takeControl).toHaveBeenCalledTimes(1);
 
-    // Not the active writer right now (host-1 is) — quick actions and typed
-    // keystrokes must not send, since the relay would silently drop the
-    // input anyway.
-    root.querySelector<HTMLButtonElement>('[aria-label="Quick actions"] [data-action="yes"]')?.click();
+    // Not the active writer right now (host-1 is) — typed keystrokes must not
+    // send, since the relay would silently drop the input anyway.
     terminal.type('y');
     expect(sentInput).toEqual([]);
 
@@ -117,11 +120,32 @@ describe('mountViewerApp', () => {
     expect(sentChat).toEqual(['check auth middleware']);
     expect(root.querySelector('[aria-label="Chat messages"]')?.textContent).toContain('check auth middleware');
 
-    // Regain control, then quick actions and typed keystrokes should send again.
+    // Regain control, then typed keystrokes should send again.
     capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' });
-    root.querySelector<HTMLButtonElement>('[aria-label="Quick actions"] [data-action="yes"]')?.click();
     terminal.type('y');
-    expect(sentInput).toEqual([[121, 13], [121]]);
+    expect(sentInput).toEqual([[121]]);
+  });
+
+  it('uses the status bar to open overlays and focus terminal typing', () => {
+    const root = document.createElement('div');
+    const terminal = new FakeTerminal();
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => terminal,
+      createClient: () => ({ connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() })
+    });
+
+    const chatOverlay = root.querySelector<HTMLElement>('[data-panel="chat"]');
+    expect(chatOverlay?.hidden).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Open chat"]')?.click();
+    expect(chatOverlay?.hidden).toBe(false);
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Focus terminal input"]')?.click();
+    expect(chatOverlay?.hidden).toBe(true);
+    expect(terminal.focusCalls).toBe(1);
   });
 
   it('shows auth failures without revealing the terminal', () => {
