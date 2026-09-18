@@ -82,6 +82,23 @@ func TestHostSessionStatus_SnapshotProvidesConsoleData(t *testing.T) {
 	}
 }
 
+func TestHostSessionStatus_RecordsControlChangesAsEvents(t *testing.T) {
+	var out bytes.Buffer
+	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
+	status.updatePresence(protocol.PresenceMsg{Connections: []protocol.PresenceConnectionInfo{
+		{ID: "host", Role: "host", IsActiveWriter: true},
+		{ID: "viewer-1", Role: "viewer", DisplayName: "Phone"},
+	}})
+
+	status.updateControl(protocol.ControlChangedMsg{ActiveWriterID: "viewer-1", ActiveWriterRole: "viewer"})
+	status.updateControl(protocol.ControlChangedMsg{ActiveWriterID: "host", ActiveWriterRole: "host"})
+
+	events := status.snapshot().Events
+	if len(events) < 2 || events[0] != "Host reclaimed control" || events[1] != "Phone took control" {
+		t.Errorf("events = %#v", events)
+	}
+}
+
 func TestHostSessionStatus_PrintWritesReadableStatus(t *testing.T) {
 	var out bytes.Buffer
 	status := newHostSessionStatus(protocol.SessionModeRemote, &out)

@@ -94,8 +94,20 @@ func (s *hostSessionStatus) updatePresence(msg protocol.PresenceMsg) {
 
 func (s *hostSessionStatus) updateControl(msg protocol.ControlChangedMsg) {
 	s.mu.Lock()
+	changed := s.activeWriterID != msg.ActiveWriterID || s.activeWriterRole != msg.ActiveWriterRole
 	s.activeWriterID = msg.ActiveWriterID
 	s.activeWriterRole = msg.ActiveWriterRole
+	if changed {
+		if msg.ActiveWriterRole == "host" {
+			s.appendEventLocked("Host reclaimed control")
+		} else {
+			name := s.viewers[msg.ActiveWriterID]
+			if name == "" {
+				name = "Viewer"
+			}
+			s.appendEventLocked(name + " took control")
+		}
+	}
 	s.renderTitleLocked()
 	s.mu.Unlock()
 }
