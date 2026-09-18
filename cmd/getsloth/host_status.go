@@ -25,6 +25,7 @@ type hostControlSnapshot struct {
 	ControllerID   string
 	ControllerRole string
 	Viewers        []hostControlViewer
+	Events         []string
 }
 
 type hostSessionStatus struct {
@@ -33,6 +34,7 @@ type hostSessionStatus struct {
 	inviteURL        string
 	password         string
 	viewers          map[string]string
+	events           []string
 	activeWriterID   string
 	activeWriterRole string
 	live             bool
@@ -61,6 +63,7 @@ func (s *hostSessionStatus) setInvite(inviteURL, password string) {
 
 func (s *hostSessionStatus) updatePresence(msg protocol.PresenceMsg) {
 	s.mu.Lock()
+	previousViewers := s.viewers
 	s.viewers = make(map[string]string)
 	for _, connection := range msg.Connections {
 		if connection.Role == "viewer" {
@@ -74,6 +77,16 @@ func (s *hostSessionStatus) updatePresence(msg protocol.PresenceMsg) {
 			s.activeWriterID = connection.ID
 			s.activeWriterRole = connection.Role
 		}
+	}
+	joined := make([]string, 0)
+	for id, name := range s.viewers {
+		if _, wasPresent := previousViewers[id]; !wasPresent {
+			joined = append(joined, name)
+		}
+	}
+	sort.Strings(joined)
+	for _, name := range joined {
+		s.appendEventLocked(name + " joined")
 	}
 	s.renderTitleLocked()
 	s.mu.Unlock()
@@ -118,6 +131,16 @@ func (s *hostSessionStatus) snapshot() hostControlSnapshot {
 		ControllerID:   s.activeWriterID,
 		ControllerRole: s.activeWriterRole,
 		Viewers:        viewers,
+		Events:         append([]string(nil), s.events...),
+	}
+}
+
+const maxHostControlEvents = 8
+
+func (s *hostSessionStatus) appendEventLocked(event string) {
+	s.events = append([]string{event}, s.events...)
+	if len(s.events) > maxHostControlEvents {
+		s.events = s.events[:maxHostControlEvents]
 	}
 }
 

@@ -50,6 +50,7 @@ func TestRunHostControlConsole_PrintsLiveSessionSnapshot(t *testing.T) {
 				Name:         "Phone",
 				IsController: true,
 			}},
+			Events: []string{"Phone joined", "Phone took control"},
 		}
 	})
 	if err != nil {
@@ -61,7 +62,7 @@ func TestRunHostControlConsole_PrintsLiveSessionSnapshot(t *testing.T) {
 	if code := runHostControlConsole([]string{"--socket", server.socketPath}, &out); code != 0 {
 		t.Fatalf("runHostControlConsole exit code = %d, want 0; output = %q", code, out.String())
 	}
-	for _, want := range []string{"GETSLOTH CONTROL", "LIVE", "Remote", "1 connected", "Phone controls", "https://getsloth.dev/s/example", "host-only-password"} {
+	for _, want := range []string{"[r] RECLAIM", "[k] KILL VIEWERS", "[i] INVITE", "[q] QUIT", "GETSLOTH CONTROL", "LIVE", "Remote", "1 connected", "Phone controls", "https://getsloth.dev/s/example", "host-only-password", "Phone joined", "Phone took control"} {
 		if !bytes.Contains(out.Bytes(), []byte(want)) {
 			t.Errorf("control console output = %q, want %q", out.String(), want)
 		}

@@ -91,6 +91,9 @@ func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {
 
 	viewerCount := len(snapshot.Viewers)
 
+	_, _ = fmt.Fprintln(out, "┌──────────────────────────────────────────────────────────────┐")
+	_, _ = fmt.Fprintln(out, "│ [r] RECLAIM  [k] KILL VIEWERS  [i] INVITE  [q] QUIT          │")
+	_, _ = fmt.Fprintln(out, "└──────────────────────────────────────────────────────────────┘")
 	_, _ = fmt.Fprintln(out, "GETSLOTH CONTROL")
 	_, _ = fmt.Fprintf(out, "Session     %s\n", live)
 	_, _ = fmt.Fprintf(out, "Mode        %s\n", modeLabel(snapshot.Mode))
@@ -108,5 +111,11 @@ func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {
 			names = append(names, viewer.Name)
 		}
 		_, _ = fmt.Fprintf(out, "Connected   %s\n", strings.Join(names, ", "))
+	}
+	if len(snapshot.Events) > 0 {
+		_, _ = fmt.Fprintln(out, "\nEvents")
+		for _, event := range snapshot.Events {
+			_, _ = fmt.Fprintf(out, "  • %s\n", event)
+		}
 	}
 }

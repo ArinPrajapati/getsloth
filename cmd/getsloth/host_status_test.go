@@ -77,6 +77,9 @@ func TestHostSessionStatus_SnapshotProvidesConsoleData(t *testing.T) {
 	if !snapshot.Viewers[1].IsController {
 		t.Errorf("controller viewer = %+v, want IsController true", snapshot.Viewers[1])
 	}
+	if len(snapshot.Events) == 0 || snapshot.Events[0] != "Phone joined" {
+		t.Errorf("snapshot events = %#v, want Phone joined", snapshot.Events)
+	}
 }
 
 func TestHostSessionStatus_PrintWritesReadableStatus(t *testing.T) {
