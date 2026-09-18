@@ -1,3 +1,4 @@
+import { controlModifiedInput } from './mobile-terminal-keys';
 import { MAX_INPUT_BYTES, truncateToByteLimit } from './protocol';
 
 export interface TerminalLike {
@@ -22,6 +23,8 @@ export interface TerminalView {
   focus(): void;
   write(bytes: Uint8Array): void;
   setActive(active: boolean): void;
+  sendInput(bytes: Uint8Array): void;
+  setControlModifier(active: boolean): void;
   setCanonicalSize(size: TerminalSize): void;
   desiredSize(): TerminalSize;
   setPresentationMode(mode: TerminalPresentationMode): void;
@@ -49,8 +52,17 @@ export function createTerminalView(
   const terminal = createTerminal();
 
   let isActive = false;
+  let controlModifierArmed = false;
   let lastSize: TerminalSize | null = null;
   let applyingCanonicalSize = false;
+
+  function sendInput(bytes: Uint8Array): void {
+    if (!isActive) {
+      return;
+    }
+
+    options.onInput?.(bytes.slice(0, MAX_INPUT_BYTES));
+  }
 
   function rememberSize(size: TerminalSize | null): void {
     if (!size) {
@@ -75,11 +87,9 @@ export function createTerminalView(
   terminal.setAutoFit?.(false);
 
   terminal.onData((data) => {
-    if (!isActive) {
-      return;
-    }
-
-    options.onInput?.(truncateToByteLimit(data, MAX_INPUT_BYTES));
+    const input = controlModifierArmed ? controlModifiedInput(data) : data;
+    controlModifierArmed = false;
+    sendInput(truncateToByteLimit(input, MAX_INPUT_BYTES));
   });
 
   return {
@@ -91,12 +101,21 @@ export function createTerminalView(
     },
     setActive(active: boolean): void {
       isActive = active;
+      if (!active) {
+        controlModifierArmed = false;
+      }
       terminal.setAutoFit?.(active);
 
       if (active) {
         const fitSize = terminal.fit?.() ?? terminal.proposeSize?.() ?? null;
         rememberSize(fitSize ?? lastSize);
       }
+    },
+    sendInput(bytes: Uint8Array): void {
+      sendInput(bytes);
+    },
+    setControlModifier(active: boolean): void {
+      controlModifierArmed = active && isActive;
     },
     setCanonicalSize(size: TerminalSize): void {
       lastSize = size;

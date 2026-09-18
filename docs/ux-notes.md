@@ -220,6 +220,19 @@ Implications:
   prompt/decision state is detected or when the user opens an actions helper.
   They are not permanent primary UI.
 
+**Approved mobile input behavior (2026-09-18):** typing mode opens the OS
+keyboard and a Termux-inspired helper row immediately above it. The row is
+visible only while the viewer is actively typing, never permanently. It offers
+`Esc`, `Ctrl`, `Tab`, left/up/down/right arrows, and paste; every key sends its
+actual terminal bytes through the existing active-writer-gated input path.
+Helper-key taps must preserve text-entry focus and keep the OS keyboard open.
+Switching to chat, settings, control, losing active-writer status, or leaving
+input mode closes typing mode intentionally. The current blanket
+"non-typing tap blurs the active element" behavior is rejected because it
+closes the keyboard while a mobile user is trying to navigate a TUI. The
+reference is Termux's separate extra-key and text-input toolbar modes:
+<https://github.com/termux/termux-app/blob/master/app/src/main/java/com/termux/app/terminal/io/TerminalToolbarViewPager.java>.
+
 ### 3. Status bar should be tmux-like, not a row of product cards
 
 The viewer should feel like a terminal session with a status bar, not a web app
