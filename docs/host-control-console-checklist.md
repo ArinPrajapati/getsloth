@@ -152,28 +152,29 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 
 ### Phase 1 — Document and clean current UX
 
-- [ ] Document this design and checklist.
-- [ ] Remove misleading stale startup status line.
-- [ ] Keep `Ctrl-] i` and `Ctrl-] r` fallback behavior.
+- [x] Document this design and checklist.
+- [x] Remove misleading stale startup status line.
+- [x] Keep `Ctrl-] i` and `Ctrl-] r` fallback behavior.
 
 ### Phase 2 — Local host control channel
 
-- [ ] Add local-only control endpoint/socket in the host process.
-- [ ] Publish live session state to local subscribers.
-- [ ] Implement host actions over the local channel.
+- [x] Add local-only control endpoint/socket in the host process.
+- [x] Publish live session state to local subscribers.
+- [x] Implement host actions over the local channel.
 
 ### Phase 3 — Basic control console
 
-- [ ] Add `getsloth control ...` command or equivalent internal console entrypoint.
-- [ ] Render basic terminal UI.
-- [ ] Show live session status, URL, password, viewers, controller, events.
+- [x] Add `getsloth control ...` command or equivalent internal console entrypoint.
+- [x] Render basic terminal UI.
+- [x] Show live session status, URL, password, viewers, and controller.
+- [ ] Show recent events.
 - [ ] Add keyboard commands.
 
 ### Phase 4 — Auto-open separate terminal
 
-- [ ] Launch control console automatically on session start.
-- [ ] Implement macOS terminal launch first.
-- [ ] Add fallback messaging.
+- [x] Launch control console automatically on session start.
+- [x] Implement macOS Terminal launch first.
+- [x] Add fallback messaging.
 
 ### Phase 5 — Buttons, mouse, and graph polish
 

@@ -48,6 +48,50 @@ func TestHostControlServer_RejectsUnknownActionsAndCleansUpSocket(t *testing.T) 
 	}
 }
 
+func TestHostControlServer_InvokesOnlyConfiguredHostActions(t *testing.T) {
+	server, err := startHostControlServer(func() hostControlSnapshot { return hostControlSnapshot{} })
+	if err != nil {
+		t.Fatalf("startHostControlServer: %v", err)
+	}
+	t.Cleanup(func() { _ = server.Close() })
+
+	var reclaimed, killed int
+	server.setActions(
+		func() error {
+			reclaimed++
+			return nil
+		},
+		func() error {
+			killed++
+			return nil
+		},
+	)
+
+	for _, action := range []string{"reclaim", "kill"} {
+		conn, err := net.Dial("unix", server.socketPath)
+		if err != nil {
+			t.Fatalf("dial control socket: %v", err)
+		}
+		if err := json.NewEncoder(conn).Encode(hostControlRequest{Action: action}); err != nil {
+			t.Fatalf("write %s request: %v", action, err)
+		}
+		var response hostControlResponse
+		if err := json.NewDecoder(conn).Decode(&response); err != nil {
+			t.Fatalf("read %s response: %v", action, err)
+		}
+		if err := conn.Close(); err != nil {
+			t.Fatalf("close %s client: %v", action, err)
+		}
+		if response.Error != "" {
+			t.Errorf("%s response error = %q", action, response.Error)
+		}
+	}
+
+	if reclaimed != 1 || killed != 1 {
+		t.Errorf("actions invoked reclaim=%d kill=%d, want 1 each", reclaimed, killed)
+	}
+}
+
 func TestHostControlServer_ReturnsLiveSnapshotOverPrivateSocket(t *testing.T) {
 	want := hostControlSnapshot{
 		Live:           true,

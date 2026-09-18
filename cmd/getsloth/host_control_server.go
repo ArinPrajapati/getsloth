@@ -22,11 +22,18 @@ type hostControlResponse struct {
 	Error    string               `json:"error,omitempty"`
 }
 
+type hostControlActions struct {
+	reclaim func() error
+	kill    func() error
+}
+
 type hostControlServer struct {
 	listener   net.Listener
 	socketPath string
 	stateDir   string
 	snapshot   func() hostControlSnapshot
+	actionsMu  sync.RWMutex
+	actions    hostControlActions
 	closeOnce  sync.Once
 	closeErr   error
 }
@@ -63,6 +70,12 @@ func startHostControlServer(snapshot func() hostControlSnapshot) (*hostControlSe
 	return server, nil
 }
 
+func (s *hostControlServer) setActions(reclaim, kill func() error) {
+	s.actionsMu.Lock()
+	s.actions = hostControlActions{reclaim: reclaim, kill: kill}
+	s.actionsMu.Unlock()
+}
+
 func (s *hostControlServer) serve() {
 	for {
 		conn, err := s.listener.Accept()
@@ -87,12 +100,35 @@ func (s *hostControlServer) handle(conn net.Conn) {
 	response := hostControlResponse{}
 	switch request.Action {
 	case "snapshot":
-		snapshot := s.snapshot()
-		response.Snapshot = &snapshot
+		// No action needed.
+	case "reclaim", "kill":
+		if err := s.invoke(request.Action); err != nil {
+			response.Error = err.Error()
+		}
 	default:
 		response.Error = "unknown host control action"
 	}
+	if response.Error == "" {
+		snapshot := s.snapshot()
+		response.Snapshot = &snapshot
+	}
 	_ = json.NewEncoder(conn).Encode(response)
+}
+
+func (s *hostControlServer) invoke(action string) error {
+	s.actionsMu.RLock()
+	var invoke func() error
+	switch action {
+	case "reclaim":
+		invoke = s.actions.reclaim
+	case "kill":
+		invoke = s.actions.kill
+	}
+	s.actionsMu.RUnlock()
+	if invoke == nil {
+		return errors.New("host control action is unavailable")
+	}
+	return invoke()
 }
 
 func (s *hostControlServer) Close() error {

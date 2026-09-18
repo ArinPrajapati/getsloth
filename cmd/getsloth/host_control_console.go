@@ -6,13 +6,17 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 )
 
 func runHostControlConsole(args []string, out io.Writer) int {
-	socketPath, ok := hostControlSocketPath(args)
+	socketPath, action, watch, ok := hostControlArguments(args)
 	if !ok {
-		_, _ = fmt.Fprintln(out, "getsloth control: usage: getsloth control --socket <path>")
+		_, _ = fmt.Fprintln(out, "getsloth control: usage: getsloth control --socket <path> [--watch|--action reclaim|kill]")
 		return 2
+	}
+	if watch {
+		return watchHostControlConsole(socketPath, out)
 	}
 
 	conn, err := net.Dial("unix", socketPath)
@@ -22,7 +26,7 @@ func runHostControlConsole(args []string, out io.Writer) int {
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err := json.NewEncoder(conn).Encode(hostControlRequest{Action: "snapshot"}); err != nil {
+	if err := json.NewEncoder(conn).Encode(hostControlRequest{Action: action}); err != nil {
 		_, _ = fmt.Fprintf(out, "getsloth control: request host status: %v\n", err)
 		return 1
 	}
@@ -45,11 +49,27 @@ func runHostControlConsole(args []string, out io.Writer) int {
 	return 0
 }
 
-func hostControlSocketPath(args []string) (string, bool) {
+func hostControlArguments(args []string) (socketPath, action string, watch, ok bool) {
 	if len(args) == 2 && args[0] == "--socket" && args[1] != "" {
-		return args[1], true
+		return args[1], "snapshot", false, true
 	}
-	return "", false
+	if len(args) == 3 && args[0] == "--socket" && args[1] != "" && args[2] == "--watch" {
+		return args[1], "snapshot", true, true
+	}
+	if len(args) == 4 && args[0] == "--socket" && args[1] != "" && args[2] == "--action" && args[3] != "" {
+		return args[1], args[3], false, true
+	}
+	return "", "", false, false
+}
+
+func watchHostControlConsole(socketPath string, out io.Writer) int {
+	for {
+		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
+		if code := runHostControlConsole([]string{"--socket", socketPath}, out); code != 0 {
+			return code
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {

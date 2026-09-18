@@ -59,6 +59,7 @@ func main() {
 	var onPTYReady func(*os.File)
 	var onHostSize func(cols, rows int)
 	var inputActions *hostInputActions
+	var controlServer *hostControlServer
 
 	ws, created, err := connectHost(relayURL, protocol.SessionConfigMsg{
 		Envelope: protocol.NewEnvelope("session_config"),
@@ -86,14 +87,19 @@ func main() {
 		// the URL carries the auth public key (never a secret on its
 		// own), the password is a distinct line and is never part of
 		// the URL in either the path or the fragment.
-		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL()))
+		inviteURL := shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL())
+		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", inviteURL)
 		fmt.Fprintf(os.Stderr, "getsloth: password: %s\n", password)
 
 		active := &atomic.Bool{}
 		active.Store(true) // host starts as the active writer
 		isActiveWriter = active
 		status := newHostSessionStatus(mode, os.Stderr)
-		status.print()
+		status.setInvite(inviteURL, password)
+		controlServer, err = startHostControlServer(status.snapshot)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
+		}
 		fmt.Fprintln(os.Stderr, "getsloth: host controls: Ctrl-] r reclaim · Ctrl-] i status")
 
 		ptmxCh := make(chan *os.File, 1)
@@ -106,11 +112,27 @@ func main() {
 			})
 		}
 
+		reclaim := func() error {
+			return ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
+		}
+		killViewers := func() error {
+			err := ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
+			if err == nil {
+				fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+			}
+			return err
+		}
+		if controlServer != nil {
+			controlServer.setActions(reclaim, killViewers)
+			if err := launchHostControlConsole(controlServer.socketPath); err != nil {
+				fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
+			} else {
+				fmt.Fprintln(os.Stderr, "getsloth: host control console opened in a separate Terminal window")
+			}
+		}
 		inputActions = &hostInputActions{
-			onReclaim: func() {
-				_ = ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
-			},
-			onStatus: status.print,
+			onReclaim: func() { _ = reclaim() },
+			onStatus:  status.print,
 		}
 
 		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr, status)
@@ -125,10 +147,9 @@ func main() {
 			for sig := range signals {
 				switch sig {
 				case syscall.SIGUSR2:
-					_ = ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
+					_ = reclaim()
 				case syscall.SIGUSR1:
-					_ = ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
-					fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+					_ = killViewers()
 				}
 			}
 		}()
@@ -162,6 +183,10 @@ func main() {
 	}()
 
 	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, onHostSize, inputActions, panicKill)
+
+	if controlServer != nil {
+		_ = controlServer.Close()
+	}
 
 	if ws != nil {
 		// os.Exit below skips deferred functions, so cleanup happens
