@@ -241,4 +241,100 @@ Settings to consider for v0/v1:
 Branding belongs on the landing page and marketing surfaces. The live session
 viewer should feel like a productivity environment, not a branded product page.
 
+## Pre-implementation UX gap checklist
+
+Current state after merging `main` into `claude/ux-design`:
+
+- Integration has moved forward and the frontend is wired end-to-end, but the
+  viewer UI is still the old card-based layout: branded hero, status card,
+  terminal card, separate chat card, separate control card, and sticky
+  quick-actions card on mobile.
+- That layout was correct enough for proving behavior, but it contradicts the
+  new UX direction. The design pass is not just "make colors nicer"; it needs
+  to restructure the viewer around terminal-first layout.
+
+Before finalizing the UX spec and starting implementation, resolve these gaps:
+
+1. **Session shell**
+   - Replace the live-session hero/card shell with a terminal-first shell.
+   - No `getsloth` wordmark/marketing copy inside the authenticated live
+     session view.
+   - Password gate can still be a focused gate, but after auth the terminal
+     should become the page.
+
+2. **Status bar**
+   - Build one tmux-like status bar as the main control surface.
+   - It should contain session/connection state, active driver/control state,
+     chat notification, type/input entry point, settings, and maybe viewer
+     count.
+   - Avoid separate persistent cards for chat/control/quick-actions in the
+     live-session view.
+
+3. **Quick actions**
+   - Remove permanent `Yes / No / Continue` from the default UI.
+   - Keep any quick actions contextual only: prompt-aware helper or optional
+     action menu, never the main visible product surface.
+   - Existing `quick-actions.ts` behavior can remain as tested protocol glue
+     until the design pass rewires it, but the visible UX should not center on
+     those buttons.
+
+4. **Typing model**
+   - Typing is first-class on mobile.
+   - Add a proper `Type`/input mode instead of assuming users only tap canned
+     actions.
+   - When the OS keyboard opens, keep the active cursor/input row visible.
+   - This likely requires the terminal view layer to expose/track cursor
+     position from xterm's public active buffer API and combine it with the
+     visible keyboard/composer space.
+
+5. **Mobile terminal helper row**
+   - Explore a Termux-like helper row for terminal keys: Esc, Ctrl, Tab,
+     arrows, paste, maybe function keys.
+   - This row is terminal assistance, not product chrome.
+   - It should appear when typing or when a TUI needs it, not permanently steal
+     screen space.
+
+6. **Terminal sizing and resize**
+   - xterm currently uses a fixed font/theme and no FitAddon-style fitting in
+     `web/src/xterm-terminal.ts`.
+   - The design pass needs a reliable fit/resize story: terminal fills the
+     available viewport, status bar/composer/keyboard reserve space, and the
+     terminal grid updates cleanly.
+   - Be careful with PTY resize semantics: the host machine owns the real PTY.
+     A viewer's browser size may not always be allowed to resize the shared PTY
+     without disrupting the host. Decide whether viewer resize only affects the
+     browser render, or whether active-control viewers can request PTY resize.
+
+7. **TUI compatibility checks**
+   - Manual verification must include TUI/full-screen terminal programs, not
+     only agent text output.
+   - Test: `htop`, `vim`, `less`, `tmux`, `claude`, `codex`, plus resize,
+     arrow keys, Ctrl+C, Esc, Tab, paste, and mouse where applicable.
+   - The goal is "looks like a real terminal on phone/laptop/browser", not
+     "logs stream into a dark box."
+
+8. **Terminal theme/settings**
+   - Need viewer settings for at least font size and status-bar visibility.
+   - Theme should be neutral terminal-first: dark readable default, maybe dim
+     and high-contrast variants.
+   - Settings are viewer-local comfort controls, not session state and not
+     branding.
+
+9. **Chat**
+   - Chat should move behind the status bar with notification state.
+   - New messages should be visible as a small highlight/badge while the
+     terminal remains primary.
+   - Chat opens as an overlay/sheet and must not write into the PTY path.
+
+10. **Large-browser / TV / console-browser support**
+    - Same UX model as desktop/mobile: terminal owns the screen.
+    - Need readable font-size settings and visible focus states for keyboard or
+      controller navigation.
+    - Avoid hover-only controls.
+
+11. **Accessibility/performance gates**
+    - F8 is still pending in `tasks/todo.md`.
+    - The design pass should expect to run `axe` and `lighthouse`, but the
+      human phone/keyboard/TUI checks are equally important for this product.
+
 Revisit this whole note when starting the actual UX pass.
