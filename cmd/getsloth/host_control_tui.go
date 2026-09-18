@@ -8,84 +8,108 @@ import (
 )
 
 var (
-	controlTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
-	controlLiveStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
-	controlMutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	controlButton     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("62")).Padding(0, 1)
-	controlDanger     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("160")).Padding(0, 1)
-	controlPanel      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62")).Padding(0, 1)
+	controlAccentStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51"))
+	controlLiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
+	controlMutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	controlKeyStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51"))
+	controlDangerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
+	controlPanel       = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
 )
 
-func renderHostControlDashboard(snapshot hostControlSnapshot, width int) string {
-	if width < 44 {
-		width = 44
+func renderHostControlDashboard(snapshot hostControlSnapshot, width int, showInvite bool) string {
+	if width < 48 {
+		width = 48
 	}
-	contentWidth := width - 4
+	contentWidth := width - 2
 
 	live := controlMutedStyle.Render("OFFLINE")
 	if snapshot.Live {
-		live = controlLiveStyle.Render("LIVE")
+		live = controlLiveStyle.Render("● LIVE")
 	}
-	controller := "Host controls"
+	header := lipgloss.JoinHorizontal(lipgloss.Top,
+		controlAccentStyle.Render("GETSLOTH // HOST CONTROL"),
+		strings.Repeat(" ", maxDashboardWidth(contentWidth-42, 2)),
+		live,
+	)
+	keybar := strings.Join([]string{
+		controlKeyStyle.Render("[r]") + " RECLAIM",
+		controlDangerStyle.Render("[k]") + " KILL VIEWERS",
+		controlKeyStyle.Render("[i]") + " INVITE",
+		controlMutedStyle.Render("[q] CLOSE"),
+	}, "   ")
+
+	controller := "host"
 	if snapshot.ControllerRole == "viewer" {
-		controller = "Viewer controls"
+		controller = "viewer"
 		for _, viewer := range snapshot.Viewers {
 			if viewer.ID == snapshot.ControllerID {
-				controller = viewer.Name + " controls"
+				controller = viewer.Name
 				break
 			}
 		}
 	}
+	sessionLines := []string{
+		controlAccentStyle.Render("SESSION"),
+		fmt.Sprintf("state       %s", live),
+		fmt.Sprintf("mode        %s", modeLabel(snapshot.Mode)),
+		fmt.Sprintf("controller  %s", controller),
+	}
+	if showInvite {
+		sessionLines = append(sessionLines,
+			fmt.Sprintf("url         %s", snapshot.InviteURL),
+			fmt.Sprintf("password    %s", snapshot.Password),
+			controlMutedStyle.Render("Copied to clipboard • [i] to hide"),
+		)
+	} else {
+		sessionLines = append(sessionLines, controlMutedStyle.Render("Invite link ready • [i] to copy/show"))
+	}
 
-	actions := lipgloss.JoinHorizontal(lipgloss.Top,
-		controlButton.Render("[r] RECLAIM"), " ",
-		controlDanger.Render("[k] KILL VIEWERS"), " ",
-		controlButton.Render("[i] INVITE"), " ",
-		controlButton.Render("[q] QUIT"),
-	)
-	header := lipgloss.NewStyle().Width(contentWidth).Render(actions)
-
-	summary := strings.Join([]string{
-		controlTitleStyle.Render("GETSLOTH CONTROL"),
-		"",
-		fmt.Sprintf("%-12s %s", "Session", live),
-		fmt.Sprintf("%-12s %s", "Mode", modeLabel(snapshot.Mode)),
-		fmt.Sprintf("%-12s %d connected", "Viewers", len(snapshot.Viewers)),
-		fmt.Sprintf("%-12s %s", "Controller", controller),
-		fmt.Sprintf("%-12s %s", "URL", truncateDashboardText(snapshot.InviteURL, contentWidth-12)),
-		fmt.Sprintf("%-12s %s", "Password", truncateDashboardText(snapshot.Password, contentWidth-12)),
-	}, "\n")
-
-	viewerLines := []string{"VIEWERS"}
+	viewerLines := []string{controlAccentStyle.Render("LIVE VIEWERS")}
 	if len(snapshot.Viewers) == 0 {
-		viewerLines = append(viewerLines, controlMutedStyle.Render("No viewers connected"))
+		viewerLines = append(viewerLines, controlMutedStyle.Render("waiting for a viewer to join"))
 	}
 	for _, viewer := range snapshot.Viewers {
 		role := "watching"
+		marker := controlMutedStyle.Render("○")
 		if viewer.IsController {
 			role = "controlling"
+			marker = controlLiveStyle.Render("●")
 		}
-		viewerLines = append(viewerLines, truncateDashboardText("● "+viewer.Name+"  "+role, contentWidth-4))
+		viewerLines = append(viewerLines, marker+" "+truncateDashboardText(viewer.Name, 28)+"  "+role)
 	}
 
-	eventLines := []string{"EVENTS"}
+	eventLines := []string{controlAccentStyle.Render("ACTIVITY")}
 	if len(snapshot.Events) == 0 {
-		eventLines = append(eventLines, controlMutedStyle.Render("Waiting for activity"))
+		eventLines = append(eventLines, controlMutedStyle.Render("waiting for activity"))
 	}
 	for _, event := range snapshot.Events {
-		eventLines = append(eventLines, truncateDashboardText("• "+event, contentWidth-4))
+		eventLines = append(eventLines, "• "+event)
 	}
 
-	if contentWidth < 100 {
-		viewers := controlPanel.Width(contentWidth - 2).Render(strings.Join(viewerLines, "\n"))
-		events := controlPanel.Width(contentWidth - 2).Render(strings.Join(eventLines, "\n"))
-		return strings.Join([]string{header, "", summary, "", viewers, events}, "\n")
+	var body string
+	if contentWidth >= 100 {
+		leftWidth := 36
+		rightWidth := contentWidth - leftWidth - 3
+		session := controlPanel.Width(leftWidth - 2).Render(fitDashboardLines(sessionLines, leftWidth-4))
+		viewers := controlPanel.Width(rightWidth - 2).Render(fitDashboardLines(viewerLines, rightWidth-4))
+		activity := controlPanel.Width(contentWidth - 2).Render(fitDashboardLines(eventLines, contentWidth-4))
+		body = strings.Join([]string{lipgloss.JoinHorizontal(lipgloss.Top, session, " ", viewers), activity}, "\n")
+	} else {
+		session := controlPanel.Width(contentWidth - 2).Render(fitDashboardLines(sessionLines, contentWidth-4))
+		viewers := controlPanel.Width(contentWidth - 2).Render(fitDashboardLines(viewerLines, contentWidth-4))
+		activity := controlPanel.Width(contentWidth - 2).Render(fitDashboardLines(eventLines, contentWidth-4))
+		body = strings.Join([]string{session, viewers, activity}, "\n")
 	}
 
-	panelWidth := contentWidth / 2
-	viewers := controlPanel.Width(panelWidth - 2).Render(strings.Join(viewerLines, "\n"))
-	events := controlPanel.Width(contentWidth - panelWidth - 2).Render(strings.Join(eventLines, "\n"))
-	return strings.Join([]string{header, "", summary, "", lipgloss.JoinHorizontal(lipgloss.Top, viewers, " ", events)}, "\n")
+	return strings.Join([]string{header, keybar, "", body}, "\n")
+}
+
+func fitDashboardLines(lines []string, width int) string {
+	fitted := make([]string, 0, len(lines))
+	for _, line := range lines {
+		fitted = append(fitted, truncateDashboardText(line, width))
+	}
+	return strings.Join(fitted, "\n")
 }
 
 func truncateDashboardText(value string, width int) string {
@@ -103,4 +127,11 @@ func truncateDashboardText(value string, width int) string {
 		builder.WriteRune(runeValue)
 	}
 	return builder.String() + "…"
+}
+
+func maxDashboardWidth(value, minimum int) int {
+	if value < minimum {
+		return minimum
+	}
+	return value
 }

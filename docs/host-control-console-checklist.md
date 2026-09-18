@@ -18,6 +18,11 @@ This replaces stale one-time startup status like `LIVE · Remote · 0 viewers ·
 
 Terminal TUI with visible action buttons, keyboard shortcuts, mouse/click support where terminals support it, and a compact dashboard layout.
 
+**Visual language decision:** use a dense, terminal-native monitor inspired by
+`btop`/`lazygit`, not a web-dashboard imitation. A compact header/keybar leads;
+session and live-viewer state occupy the primary row; activity is a full-width
+stream below. Long invite credentials must never dominate or overflow the UI.
+
 Example shape:
 
 ```text

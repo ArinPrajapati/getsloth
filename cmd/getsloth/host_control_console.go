@@ -101,7 +101,7 @@ func watchHostControlConsole(socketPath string, out io.Writer) int {
 		}
 		return 1
 	}
-	program := tea.NewProgram(newHostControlTUI(socketPath, *response.Snapshot), tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(out))
+	program := tea.NewProgram(newHostControlTUI(socketPath, out, *response.Snapshot), tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(out))
 	if _, err := program.Run(); err != nil {
 		_, _ = fmt.Fprintf(out, "getsloth control: run terminal UI: %v\n", err)
 		return 1
@@ -116,5 +116,5 @@ func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {
 			width = cols
 		}
 	}
-	_, _ = fmt.Fprintln(out, renderHostControlDashboard(snapshot, width))
+	_, _ = fmt.Fprintln(out, renderHostControlDashboard(snapshot, width, false))
 }

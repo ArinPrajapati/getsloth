@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"time"
 
+	osc52 "github.com/aymanbagabas/go-osc52/v2"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -15,13 +17,15 @@ type hostControlSnapshotMsg struct {
 
 type hostControlTUI struct {
 	socketPath string
+	out        io.Writer
 	snapshot   hostControlSnapshot
 	width      int
 	height     int
+	showInvite bool
 }
 
-func newHostControlTUI(socketPath string, snapshot hostControlSnapshot) hostControlTUI {
-	return hostControlTUI{socketPath: socketPath, snapshot: snapshot, width: 80}
+func newHostControlTUI(socketPath string, out io.Writer, snapshot hostControlSnapshot) hostControlTUI {
+	return hostControlTUI{socketPath: socketPath, out: out, snapshot: snapshot, width: 80}
 }
 
 func (m hostControlTUI) Init() tea.Cmd {
@@ -52,6 +56,13 @@ func (m hostControlTUI) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if action == "reclaim" || action == "kill" {
 			return m, hostControlActionCmd(m.socketPath, action)
 		}
+		if action == "snapshot" {
+			m.showInvite = !m.showInvite
+			if m.showInvite {
+				return m, hostControlCopyInviteCmd(m.out, m.snapshot)
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -59,7 +70,20 @@ func (m hostControlTUI) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 type hostControlRefreshMsg struct{}
 
 func (m hostControlTUI) View() string {
-	return renderHostControlDashboard(m.snapshot, m.width)
+	return renderHostControlDashboard(m.snapshot, m.width, m.showInvite)
+}
+
+// hostControlCopyInviteCmd copies the invite URL and password to the local
+// clipboard via an OSC52 terminal escape sequence. This works over SSH
+// without any clipboard tooling on the host; failures are ignored because
+// copying is a convenience, not a required part of revealing the invite.
+func hostControlCopyInviteCmd(out io.Writer, snapshot hostControlSnapshot) tea.Cmd {
+	return func() tea.Msg {
+		if out != nil {
+			_, _ = osc52.New(snapshot.InviteURL + "\n" + snapshot.Password).WriteTo(out)
+		}
+		return nil
+	}
 }
 
 func hostControlRefreshCmd(socketPath string) tea.Cmd {
