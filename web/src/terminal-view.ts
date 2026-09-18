@@ -5,6 +5,13 @@ export interface TerminalLike {
   write(data: Uint8Array): void;
   onData(handler: (data: string) => void): void;
   focus?(): void;
+  fit?(): TerminalSize | null;
+  onResize?(handler: (size: TerminalSize) => void): void;
+}
+
+export interface TerminalSize {
+  cols: number;
+  rows: number;
 }
 
 export interface TerminalView {
@@ -15,6 +22,7 @@ export interface TerminalView {
 
 export interface TerminalViewOptions {
   onInput?(bytes: Uint8Array): void;
+  onResize?(size: TerminalSize): void;
 }
 
 // Typed keystrokes are only ever forwarded while this viewer is the active
@@ -30,9 +38,26 @@ export function createTerminalView(
   options: TerminalViewOptions = {}
 ): TerminalView {
   const terminal = createTerminal();
-  terminal.open(element);
 
   let isActive = false;
+  let lastSize: TerminalSize | null = null;
+
+  function rememberSize(size: TerminalSize | null): void {
+    if (!size) {
+      return;
+    }
+    lastSize = size;
+
+    if (isActive) {
+      options.onResize?.(size);
+    }
+  }
+
+  terminal.onResize?.((size) => {
+    rememberSize(size);
+  });
+  terminal.open(element);
+  rememberSize(terminal.fit?.() ?? null);
 
   terminal.onData((data) => {
     if (!isActive) {
@@ -51,6 +76,8 @@ export function createTerminalView(
     },
     setActive(active: boolean): void {
       isActive = active;
+      const fitSize = terminal.fit?.() ?? null;
+      rememberSize(fitSize ?? lastSize);
     }
   };
 }

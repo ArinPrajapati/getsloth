@@ -10,6 +10,7 @@ import (
 
 	"github.com/arinprajapati/getsloth/internal/hostauth"
 	"github.com/arinprajapati/getsloth/internal/protocol"
+	"github.com/creack/pty"
 )
 
 // runHostMessageLoop reads every message the relay sends to the host
@@ -74,6 +75,19 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 				continue
 			}
 			_, _ = ptmx.Write(data)
+
+		case "resize":
+			var msg protocol.ResizeMsg
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				continue
+			}
+			if msg.Cols < 2 || msg.Rows < 2 || msg.Cols > 1000 || msg.Rows > 500 {
+				continue
+			}
+			_ = pty.Setsize(ptmx, &pty.Winsize{
+				Rows: uint16(msg.Rows),
+				Cols: uint16(msg.Cols),
+			})
 
 		case "chat_message":
 			var msg protocol.ChatBroadcastMsg

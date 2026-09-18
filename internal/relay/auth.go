@@ -37,6 +37,8 @@ func (s *Server) handleViewerMessage(session *Session, conn *Connection, remoteA
 			s.handleTakeControl(session, conn)
 		case "input":
 			s.handleInput(session, conn, raw)
+		case "resize":
+			s.handleResize(session, conn, raw)
 		case "chat_message":
 			s.handleChatMessage(session, conn, raw)
 		}
@@ -170,6 +172,7 @@ func (s *Server) handleAuthResponse(session *Session, msg protocol.AuthResponseM
 		Token:        token,
 		ConnectionID: pending.viewerID,
 	})
+	session.replayOutputTo(pending.conn)
 	s.broadcastPresence(session)
 }
 
@@ -209,5 +212,6 @@ func (s *Server) handleResume(session *Session, conn *Connection, raw []byte) {
 		Token:        msg.Token,
 		ConnectionID: ownerID,
 	})
+	session.replayOutputTo(conn)
 	s.broadcastPresence(session)
 }

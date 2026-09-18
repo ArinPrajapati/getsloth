@@ -95,3 +95,33 @@ func (s *Server) handleInput(session *Session, conn *Connection, raw []byte) {
 		SenderID:   conn.ID(),
 	})
 }
+
+// handleResize forwards the active viewer's browser terminal size to the
+// host so the real PTY rows/cols match the visible xterm grid. Without
+// this, full-screen terminal UIs render into whatever small default size
+// the PTY had, leaving nvim/htop/tmux painted only in the top-left of a
+// much larger browser terminal.
+func (s *Server) handleResize(session *Session, conn *Connection, raw []byte) {
+	session.mu.Lock()
+	isActive := session.activeWriterID == conn.ID()
+	host := session.host
+	session.mu.Unlock()
+
+	if !isActive || host == nil {
+		return
+	}
+
+	var msg protocol.ResizeMsg
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return
+	}
+	if msg.Cols < 2 || msg.Rows < 2 || msg.Cols > 1000 || msg.Rows > 500 {
+		return
+	}
+
+	_ = host.writeJSON(protocol.ResizeMsg{
+		Envelope: protocol.NewEnvelope("resize"),
+		Cols:     msg.Cols,
+		Rows:     msg.Rows,
+	})
+}

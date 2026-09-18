@@ -163,6 +163,21 @@ describe('RelayClient', () => {
     expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'input', data_base64: 'eQ0=' })]);
   });
 
+  it('sends terminal resize messages with columns and rows', () => {
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined
+    });
+
+    client.connect();
+    client.sendResize(160, 44);
+
+    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'resize', cols: 160, rows: 44 })]);
+  });
+
   it('surfaces transport errors and can disconnect explicitly', () => {
     const states: ConnectionState[] = [];
     const errors: string[] = [];

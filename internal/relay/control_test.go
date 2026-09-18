@@ -269,6 +269,52 @@ func TestInput_ForwardedToHost_WhenSenderIsActiveWriter(t *testing.T) {
 	}
 }
 
+func TestResize_OnlyForwardedFromActiveWriter(t *testing.T) {
+	base, cleanup := newTestServer(t)
+	defer cleanup()
+
+	host := dial(t, base+"/ws/host")
+	var created protocol.SessionCreatedMsg
+	readMsg(t, host, &created)
+	hs := newHostStub(t, host, true)
+
+	viewer := authedViewer(t, base, created.SessionID, hs)
+
+	if err := viewer.WriteJSON(protocol.ResizeMsg{
+		Envelope: protocol.NewEnvelope("resize"),
+		Cols:     160,
+		Rows:     44,
+	}); err != nil {
+		t.Fatalf("sending inactive resize: %v", err)
+	}
+	hs.expectNothing(t)
+
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+		t.Fatalf("sending take_control: %v", err)
+	}
+	var hostControlChanged protocol.ControlChangedMsg
+	hs.nextSkippingPresence(t, &hostControlChanged)
+	var viewerControlChanged protocol.ControlChangedMsg
+	readMsgSkippingPresence(t, viewer, &viewerControlChanged)
+
+	if err := viewer.WriteJSON(protocol.ResizeMsg{
+		Envelope: protocol.NewEnvelope("resize"),
+		Cols:     160,
+		Rows:     44,
+	}); err != nil {
+		t.Fatalf("sending active resize: %v", err)
+	}
+
+	var resize protocol.ResizeMsg
+	hs.nextSkippingPresence(t, &resize)
+	if resize.Cols != 160 || resize.Rows != 44 {
+		t.Fatalf("forwarded resize = %dx%d, want 160x44", resize.Cols, resize.Rows)
+	}
+	if resize.Type != "resize" {
+		t.Fatalf("forwarded type = %q, want resize", resize.Type)
+	}
+}
+
 func TestTakeControl_HostReclaim_LocksOutViewerBriefly(t *testing.T) {
 	base, cleanup := newTestServer(t)
 	defer cleanup()

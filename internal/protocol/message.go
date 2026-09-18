@@ -155,6 +155,18 @@ type InputForwardMsg struct {
 	SenderID   string `json:"sender_id"`
 }
 
+// ResizeMsg is the viewer's current terminal grid size, sent
+// viewer -> relay -> host whenever the browser terminal is fit to a new
+// viewport. Full-screen TUIs (nvim, htop, tmux, Codex/Claude TUIs) render
+// to the PTY's rows/cols, not the CSS box, so the host PTY has to track
+// the browser grid size or those apps only paint into a small top-left
+// region.
+type ResizeMsg struct {
+	Envelope
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
 // TakeControlMsg requests the sender become the active writer - sent by
 // either the host or a viewer, host or viewer alike. Relay reassigns
 // immediately; a host-originated one is additionally authoritative for

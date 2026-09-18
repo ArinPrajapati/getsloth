@@ -26,6 +26,7 @@ type Session struct {
 	closed           bool
 	pendingAuth      map[string]pendingAuth // requestID -> the viewer awaiting a verdict
 	tokens           map[string]string      // relay-issued token -> the connection_id it authenticates
+	outputBacklog    []string               // recent base64 output chunks replayed to newly authenticated viewers
 	activeWriterID   string                 // starts "host"
 	activeWriterRole string                 // starts "host"
 	lastHostReclaim  time.Time
@@ -40,6 +41,8 @@ type pendingAuth struct {
 	conn       *Connection
 	remoteAddr string
 }
+
+const maxOutputBacklogChunks = 256
 
 // newRandomID generates a URL-safe random identifier - used both for
 // session IDs and, for now, viewer connection IDs (B5's auth flow may
@@ -100,6 +103,10 @@ func (s *Session) teardown(reason string) {
 // docs/protocol.md's "Relay -> viewers only" section).
 func (s *Session) broadcastOutput(dataBase64 string) {
 	s.mu.Lock()
+	s.outputBacklog = append(s.outputBacklog, dataBase64)
+	if len(s.outputBacklog) > maxOutputBacklogChunks {
+		s.outputBacklog = s.outputBacklog[len(s.outputBacklog)-maxOutputBacklogChunks:]
+	}
 	viewers := make([]*Connection, 0, len(s.viewers))
 	for _, c := range s.viewers {
 		if c.isAuthenticated() {
@@ -114,6 +121,19 @@ func (s *Session) broadcastOutput(dataBase64 string) {
 	}
 	for _, c := range viewers {
 		_ = c.writeJSON(msg)
+	}
+}
+
+func (s *Session) replayOutputTo(conn *Connection) {
+	s.mu.Lock()
+	backlog := append([]string(nil), s.outputBacklog...)
+	s.mu.Unlock()
+
+	for _, dataBase64 := range backlog {
+		_ = conn.writeJSON(protocol.OutputMsg{
+			Envelope:   protocol.NewEnvelope("output"),
+			DataBase64: dataBase64,
+		})
 	}
 }
 

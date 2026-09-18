@@ -30,6 +30,10 @@ needs to deviate, this file changes first.
   active-writer interaction semantics and token entropy/encoding —
   the two remaining non-blocking clarifications from the final review
   pass.
+- v6: added active-writer-gated terminal `resize` messages so browser
+  xterm rows/columns are applied to the host PTY. This is required for
+  full-screen TUIs (`nvim`, `htop`, `tmux`, agent TUIs) to render across
+  the full browser terminal instead of a stale default PTY grid.
 
 ## Design rules
 
@@ -232,6 +236,11 @@ relay (not forwarded to the host). When a viewer *is* the active writer,
 the relay forwards their input to the host as `InputForwardMsg` (see
 Message reference) and the host writes the decoded bytes to the PTY.
 
+`resize` messages follow the same active-writer rule. The active viewer's
+browser terminal rows/columns are forwarded to the host so the host can
+resize the real PTY. A viewer that is not the active writer must not be
+able to resize the PTY out from under whoever is currently driving.
+
 **Host's own input never touches the network.** The host CLI owns the
 PTY directly, so when the host is the active writer, its local keystrokes
 are written straight to the PTY, with no WebSocket round-trip in either
@@ -345,6 +354,12 @@ interface InputMsg extends Envelope {
   data_base64: string; // PTY data isn't guaranteed valid UTF-8
 }
 
+interface ResizeMsg extends Envelope {
+  type: "resize";
+  cols: number; // terminal columns, fitted from the browser xterm surface
+  rows: number; // terminal rows, fitted from the browser xterm surface
+}
+
 interface TakeControlMsg extends Envelope {
   type: "take_control";
 }
@@ -417,6 +432,15 @@ interface InputForwardMsg extends Envelope {
   type: "input";
   data_base64: string;
   sender_id: string; // the viewer connection_id that sent it
+}
+
+// Forwarded only for the active viewer. The host applies this to the
+// real PTY rows/cols; without it, full-screen TUIs render into a stale
+// default-sized grid even if the browser CSS box is fullscreen.
+interface ResizeMsg extends Envelope {
+  type: "resize";
+  cols: number;
+  rows: number;
 }
 ```
 
@@ -512,7 +536,7 @@ interface ErrorMsg extends Envelope {
 | 4 | Password verified on host, not relay | `auth_request`, `auth_response` — encrypted per [Crypto wire format](#crypto-wire-format), key never touches the relay |
 | 5 | Rate-limited attempts | `auth_result{code:"RATE_LIMITED"}` |
 | 6 | Live output streaming | `output` (host→relay→viewers only) |
-| 7 | Single active writer, instant take-control, host override | `input` (viewer→relay), `InputForwardMsg` (relay→host), `take_control`, `control_changed`, host lock window |
+| 7 | Single active writer, instant take-control, host override | `input` (viewer→relay), `InputForwardMsg` (relay→host), `resize` (viewer→relay→host), `take_control`, `control_changed`, host lock window |
 | 8 | Chat panel, never touches PTY | `chat_message` |
 | 9 | Mobile quick-actions as PTY input | Frontend-side translation to `input`, see [Quick actions](#quick-actions--a-frontend-concept-not-a-wire-message) |
 | 10 | Kill switch disconnects viewers, session survives | `kill_switch`, `kicked` |

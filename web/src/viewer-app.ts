@@ -13,6 +13,7 @@ export interface ViewerClient {
   sendAuth(message: AuthMessage): void;
   sendChatMessage(text: string): void;
   sendInput(bytes: Uint8Array): void;
+  sendResize(cols: number, rows: number): void;
   sendTakeControl(): void;
 }
 
@@ -45,6 +46,9 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const terminal = createTerminalView(terminalElement, options.createTerminal, {
     onInput: (bytes) => {
       client.sendInput(bytes);
+    },
+    onResize: (size) => {
+      client.sendResize(size.cols, size.rows);
     }
   });
   const websocketUrl = viewerWebSocketUrl(options.pageUrl, options.relayBaseUrl);

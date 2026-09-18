@@ -6,7 +6,9 @@ import type { ConnectionState, RelayClientOptions } from './ws-client';
 class FakeTerminal implements TerminalLike {
   readonly writes: Uint8Array[] = [];
   focusCalls = 0;
+  size = { cols: 120, rows: 36 };
   private dataHandler: ((data: string) => void) | null = null;
+  private resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
 
   open(): void {
     return undefined;
@@ -20,12 +22,25 @@ class FakeTerminal implements TerminalLike {
     this.dataHandler = handler;
   }
 
+  fit(): { cols: number; rows: number } {
+    return this.size;
+  }
+
+  onResize(handler: (size: { cols: number; rows: number }) => void): void {
+    this.resizeHandler = handler;
+  }
+
   focus(): void {
     this.focusCalls += 1;
   }
 
   type(data: string): void {
     this.dataHandler?.(data);
+  }
+
+  resize(cols: number, rows: number): void {
+    this.size = { cols, rows };
+    this.resizeHandler?.(this.size);
   }
 }
 
@@ -43,6 +58,7 @@ describe('mountViewerApp', () => {
     const sentAuth: AuthMessage[] = [];
     const sentChat: string[] = [];
     const sentInput: number[][] = [];
+    const sentResize: Array<{ cols: number; rows: number }> = [];
     const takeControl = vi.fn();
     const client: ViewerClient = {
       connect: vi.fn(),
@@ -55,6 +71,9 @@ describe('mountViewerApp', () => {
       },
       sendInput: (bytes) => {
         sentInput.push([...bytes]);
+      },
+      sendResize: (cols, rows) => {
+        sentResize.push({ cols, rows });
       },
       sendTakeControl: takeControl
     };
@@ -96,6 +115,7 @@ describe('mountViewerApp', () => {
 
     capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' });
     expect(root.querySelector('[aria-label="Control status"]')?.textContent).toContain('You are driving');
+    expect(sentResize).toContainEqual({ cols: 120, rows: 36 });
 
     capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'host-1', active_writer_role: 'host' });
     root.querySelector<HTMLButtonElement>('[aria-label="Session control"] button')?.click();
@@ -122,8 +142,10 @@ describe('mountViewerApp', () => {
 
     // Regain control, then typed keystrokes should send again.
     capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' });
+    terminal.resize(160, 44);
     terminal.type('y');
     expect(sentInput).toEqual([[121]]);
+    expect(sentResize).toContainEqual({ cols: 160, rows: 44 });
   });
 
   it('uses the status bar to open overlays and focus terminal typing', () => {
@@ -134,7 +156,7 @@ describe('mountViewerApp', () => {
       pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
       relayBaseUrl: 'wss://relay.getsloth.dev',
       createTerminal: () => terminal,
-      createClient: () => ({ connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() })
+      createClient: () => ({ connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendResize: vi.fn(), sendTakeControl: vi.fn() })
     });
 
     const chatOverlay = root.querySelector<HTMLElement>('[data-panel="chat"]');
@@ -158,7 +180,7 @@ describe('mountViewerApp', () => {
       createTerminal: () => new FakeTerminal(),
       createClient: (options) => {
         capturedOptions.push(options);
-        return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
+        return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendResize: vi.fn(), sendTakeControl: vi.fn() };
       },
       createAuthMessage: () => Promise.resolve({
         v: 1,
@@ -180,7 +202,7 @@ describe('mountViewerApp', () => {
     const capturedOptions: RelayClientOptions[] = [];
     const createClient: ViewerClientFactory = (clientOptions) => {
       capturedOptions.push(clientOptions);
-      return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
+      return { connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendResize: vi.fn(), sendTakeControl: vi.fn() };
     };
 
     mountViewerApp(root, {
@@ -205,7 +227,7 @@ describe('mountViewerApp', () => {
     const capturedOptions: RelayClientOptions[] = [];
     const createClient: ViewerClientFactory = (clientOptions) => {
       capturedOptions.push(clientOptions);
-      return { connect: vi.fn(), disconnect, sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
+      return { connect: vi.fn(), disconnect, sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendResize: vi.fn(), sendTakeControl: vi.fn() };
     };
 
     mountViewerApp(root, {
@@ -228,7 +250,7 @@ describe('mountViewerApp', () => {
     const capturedOptions: RelayClientOptions[] = [];
     const createClient: ViewerClientFactory = (clientOptions) => {
       capturedOptions.push(clientOptions);
-      return { connect: vi.fn(), disconnect, sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendTakeControl: vi.fn() };
+      return { connect: vi.fn(), disconnect, sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendResize: vi.fn(), sendTakeControl: vi.fn() };
     };
 
     mountViewerApp(root, {

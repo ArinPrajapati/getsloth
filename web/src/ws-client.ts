@@ -184,6 +184,10 @@ export class RelayClient {
     this.socket?.send(JSON.stringify({ v: 1, type: 'input', data_base64: encodeBase64Bytes(bytes) }));
   }
 
+  sendResize(cols: number, rows: number): void {
+    this.socket?.send(JSON.stringify({ v: 1, type: 'resize', cols, rows }));
+  }
+
   sendTakeControl(): void {
     this.socket?.send(JSON.stringify({ v: 1, type: 'take_control' }));
   }
