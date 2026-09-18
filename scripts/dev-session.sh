@@ -32,14 +32,26 @@ if [ "${session_args[0]:-}" != "--remote" ] && [ "${session_args[0]:-}" != "--gr
     IFS= read -r mode_choice
     case "$mode_choice" in
       2|g|G|group|Group)
-        session_args=(--group "${session_args[@]}")
+        if [ "$#" -gt 0 ]; then
+          session_args=(--group "$@")
+        else
+          session_args=(--group)
+        fi
         ;;
       *)
-        session_args=(--remote "${session_args[@]}")
+        if [ "$#" -gt 0 ]; then
+          session_args=(--remote "$@")
+        else
+          session_args=(--remote)
+        fi
         ;;
     esac
   else
-    session_args=(--remote "${session_args[@]}")
+    if [ "$#" -gt 0 ]; then
+      session_args=(--remote "$@")
+    else
+      session_args=(--remote)
+    fi
   fi
 fi
 
