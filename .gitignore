@@ -19,3 +19,6 @@ worktree/
 
 # Playwright MCP tool artifacts (page snapshot cache)
 .playwright-mcp/
+
+# Local Cloudflare tunnel configs for phone/manual dev testing.
+.cloudflared/
