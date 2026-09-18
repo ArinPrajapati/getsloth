@@ -77,8 +77,13 @@ Keep the current command shape compatible:
 ```text
 getsloth                     # remote mode, default shell
 getsloth claude              # remote mode, command
+getsloth --remote claude     # explicit remote mode
 getsloth --group claude      # group mode, command
 ```
+
+The development launcher (`./scripts/dev-session.sh`) asks the host to choose
+Remote or Group when neither flag is supplied. Automation can pass
+`--remote` or `--group` to skip the prompt.
 
 Only known getsloth flags before the command are parsed. Arguments after the
 command continue to belong to the wrapped command. Help text must explain the
@@ -123,6 +128,12 @@ logical columns/rows remain canonical.
    cache and must not resize the PTY.
 6. On reclaim/disconnect, apply the cached host size immediately and notify all
    viewers.
+7. Keep the local terminal/tab title updated with live/offline state, mode,
+   viewer count/names, and the current controller. This exposes status without
+   reserving a PTY row or corrupting a full-screen TUI.
+8. Reserve `Ctrl-]` as the local getsloth command prefix. `Ctrl-] r` reclaims
+   control even while host input is gated; `Ctrl-] i` prints detailed status on
+   demand. The existing `SIGUSR2` reclaim remains available for scripts.
 
 ### Viewer lifecycle
 
@@ -313,7 +324,8 @@ model exists.
 - Run real sessions on desktop and iPhone with shell, Claude/Codex, Vim, htop,
   less, and tmux.
 - Test phone portrait/landscape, keyboard open/closed, browser chrome expanded,
-  disconnect/resume, host reclaim, and a second remote join attempt.
+  disconnect/resume, host reclaim from `Ctrl-] r`, local title/status updates,
+  and a second remote join attempt.
 
 ## Acceptance criteria
 

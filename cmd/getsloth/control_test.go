@@ -62,7 +62,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 	active := &atomic.Bool{}
 	active.Store(true)
 	ptmxCh := make(chan *os.File, 1)
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard, nil)
 
 	// Run `cat` in a real PTY via run() itself - exercising the actual
 	// production PTY-spawn path, with onPTYReady feeding this same
@@ -77,7 +77,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f }, nil, nil)
+		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f }, nil, nil, nil)
 	}()
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)

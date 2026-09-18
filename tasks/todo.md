@@ -32,8 +32,10 @@ output latency, well under the 300ms target.
 coverage on internal/relay, real end-to-end tests (not just unit tests)
 for the crypto auth flow, control handoff, and kill switch. Open items:
 confirm module path before going public, manual interactive-terminal
-check still needed, signal-based host triggers (kill switch/reclaim)
-aren't discoverable in-session yet.
+check still needed. Reclaim is now discoverable in-session: `Ctrl-] r`
+reclaims and `Ctrl-] i` reports status; the terminal title shows live
+mode/viewer/controller state without stealing a TUI row. The local soft kill
+switch remains signal-based and is intentionally absent from the web viewer.
 
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
 - [x] F1: Project scaffold + tooling wired to CONSTRAINTS.md
@@ -67,7 +69,8 @@ Detailed product and implementation contract:
 - [x] M4: Canonical-grid terminal rendering with fit/pan mobile viewing —
       automated coverage complete; real-device/TUI matrix remains under M6
 - [x] M5: Mode-aware status bar and intentional mobile typing flow — console
-      focus polish remains part of the later responsive/a11y pass
+      focus polish remains part of the later responsive/a11y pass; host-side
+      title/status and local reclaim controls are also implemented
 - [ ] M6: Multi-device shell/TUI verification
 
 **Checkpoint:** phone remote control is correct in Remote mode; Group mode is

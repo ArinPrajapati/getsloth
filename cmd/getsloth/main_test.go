@@ -53,6 +53,17 @@ func TestLaunchFromArgs_DefaultsToRemoteMode(t *testing.T) {
 	}
 }
 
+func TestLaunchFromArgs_ExplicitRemoteModeKeepsWrappedCommand(t *testing.T) {
+	mode, command := launchFromArgs([]string{"getsloth", "--remote", "codex", "resume"})
+
+	if mode != protocol.SessionModeRemote {
+		t.Fatalf("mode = %q, want remote", mode)
+	}
+	if want := []string{"codex", "resume"}; !reflect.DeepEqual(command, want) {
+		t.Fatalf("command = %#v, want %#v", command, want)
+	}
+}
+
 func TestCommandFromArgs_DefaultsToUserShell(t *testing.T) {
 	t.Setenv("SHELL", "/bin/zsh")
 

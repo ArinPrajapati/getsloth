@@ -6,17 +6,41 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   printf '%s\n' \
-    "Usage: ./scripts/dev-session.sh [--group] [command [args...]]" \
+    "Usage: ./scripts/dev-session.sh [--remote|--group] [command [args...]]" \
     "" \
     "Starts the relay, web viewer, secure phone-ready tunnel, and PTY." \
-    "With no command, getsloth opens your default shell in Remote mode." \
+    "Without an explicit mode, an interactive prompt asks you to choose." \
+    "With no command, getsloth opens your default shell." \
     "" \
     "Examples:" \
     "  ./scripts/dev-session.sh" \
     "  ./scripts/dev-session.sh claude" \
     "  ./scripts/dev-session.sh codex" \
+    "  ./scripts/dev-session.sh --remote claude" \
     "  ./scripts/dev-session.sh --group claude"
   exit 0
+fi
+
+session_args=("$@")
+if [ "${session_args[0]:-}" != "--remote" ] && [ "${session_args[0]:-}" != "--group" ]; then
+  if [ -t 0 ]; then
+    printf '%s\n' \
+      "Choose session mode:" \
+      "  1) Remote — one viewer can watch and take control" \
+      "  2) Group  — multiple viewers can watch and chat; host keeps control" >&2
+    printf 'Mode [1]: ' >&2
+    IFS= read -r mode_choice
+    case "$mode_choice" in
+      2|g|G|group|Group)
+        session_args=(--group "${session_args[@]}")
+        ;;
+      *)
+        session_args=(--remote "${session_args[@]}")
+        ;;
+    esac
+  else
+    session_args=(--remote "${session_args[@]}")
+  fi
 fi
 
 relay_port="${GETSLOTH_DEV_RELAY_PORT:-18080}"
@@ -53,6 +77,16 @@ fail_with_log() {
     tail -n 30 "$log_file" >&2
   fi
   exit 1
+}
+
+ensure_http_port_free() {
+  local port="$1"
+
+  if curl --silent --output /dev/null --max-time 1 "http://127.0.0.1:$port/" 2>/dev/null; then
+    echo "getsloth dev: port $port is already serving HTTP; stop the existing dev session or choose another port" >&2
+    echo "getsloth dev: override with GETSLOTH_DEV_RELAY_PORT or GETSLOTH_DEV_WEB_PORT" >&2
+    exit 1
+  fi
 }
 
 wait_for_http() {
@@ -103,6 +137,9 @@ for command in go npm cloudflared curl jq; do
     exit 1
   fi
 done
+
+ensure_http_port_free "$relay_port"
+ensure_http_port_free "$web_port"
 
 if [ ! -x "$repo_dir/web/node_modules/.bin/vite" ]; then
   echo "getsloth dev: installing frontend dependencies..." >&2
@@ -186,4 +223,4 @@ echo >&2
 
 GETSLOTH_RELAY_URL="$relay_websocket_url" \
 GETSLOTH_WEB_URL="$web_public_url" \
-  "$state_dir/getsloth" "$@"
+  "$state_dir/getsloth" "${session_args[@]}"

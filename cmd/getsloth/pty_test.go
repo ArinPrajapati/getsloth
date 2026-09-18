@@ -32,7 +32,7 @@ func nonTerminalStdin(t *testing.T) *os.File {
 func TestRun_PrintsOutputAndExitsZero(t *testing.T) {
 	var out bytes.Buffer
 
-	code := run([]string{"echo", "hello"}, nonTerminalStdin(t), &out, nil, nil, nil, nil)
+	code := run([]string{"echo", "hello"}, nonTerminalStdin(t), &out, nil, nil, nil, nil, nil)
 
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
@@ -45,7 +45,7 @@ func TestRun_PrintsOutputAndExitsZero(t *testing.T) {
 func TestRun_PropagatesNonZeroExitCode(t *testing.T) {
 	var out bytes.Buffer
 
-	code := run([]string{"sh", "-c", "exit 3"}, nonTerminalStdin(t), &out, nil, nil, nil, nil)
+	code := run([]string{"sh", "-c", "exit 3"}, nonTerminalStdin(t), &out, nil, nil, nil, nil, nil)
 
 	if code != 3 {
 		t.Errorf("exit code = %d, want 3", code)
@@ -55,7 +55,7 @@ func TestRun_PropagatesNonZeroExitCode(t *testing.T) {
 func TestRun_NoCommandGiven(t *testing.T) {
 	var out bytes.Buffer
 
-	code := run(nil, nonTerminalStdin(t), &out, nil, nil, nil, nil)
+	code := run(nil, nonTerminalStdin(t), &out, nil, nil, nil, nil, nil)
 
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
@@ -65,7 +65,7 @@ func TestRun_NoCommandGiven(t *testing.T) {
 func TestRun_NonexistentCommand(t *testing.T) {
 	var out bytes.Buffer
 
-	code := run([]string{"getsloth-test-nonexistent-binary-xyz"}, nonTerminalStdin(t), &out, nil, nil, nil, nil)
+	code := run([]string{"getsloth-test-nonexistent-binary-xyz"}, nonTerminalStdin(t), &out, nil, nil, nil, nil, nil)
 
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
@@ -86,7 +86,7 @@ func TestRun_PanicKill_TerminatesEntireProcessGroup(t *testing.T) {
 		// Spawns a background child (sleep) and prints its PID, then
 		// waits on it - if panicKill only reached the shell itself and
 		// not its child, "sleep 100" would keep running independently.
-		done <- run([]string{"sh", "-c", "sleep 100 & echo $!; wait"}, nonTerminalStdin(t), &out, nil, nil, nil, panicKill)
+		done <- run([]string{"sh", "-c", "sleep 100 & echo $!; wait"}, nonTerminalStdin(t), &out, nil, nil, nil, nil, panicKill)
 	}()
 
 	var childPID int
@@ -150,11 +150,87 @@ func TestGatedWriter_ForwardsWritesWhenActive(t *testing.T) {
 	}
 }
 
+func TestGatedWriter_ReclaimsControlWhileHostInputIsInactive(t *testing.T) {
+	var out bytes.Buffer
+	var active atomic.Bool
+	active.Store(false)
+	reclaims := 0
+
+	w := &gatedWriter{
+		dst:    &out,
+		active: &active,
+		actions: &hostInputActions{
+			onReclaim: func() { reclaims++ },
+		},
+	}
+	input := []byte{'x', hostCommandPrefix, 'r', 'y'}
+	n, err := w.Write(input)
+
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if n != len(input) {
+		t.Fatalf("n = %d, want %d", n, len(input))
+	}
+	if reclaims != 1 {
+		t.Fatalf("reclaims = %d, want 1", reclaims)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("inactive PTY received %q", out.String())
+	}
+}
+
+func TestGatedWriter_ShowsStatusWithoutForwardingCommandBytes(t *testing.T) {
+	var out bytes.Buffer
+	var active atomic.Bool
+	active.Store(true)
+	statusRequests := 0
+
+	w := &gatedWriter{
+		dst:    &out,
+		active: &active,
+		actions: &hostInputActions{
+			onStatus: func() { statusRequests++ },
+		},
+	}
+	_, err := w.Write([]byte{hostCommandPrefix, 'i'})
+
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if statusRequests != 1 {
+		t.Fatalf("status requests = %d, want 1", statusRequests)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("PTY received host command bytes %v", out.Bytes())
+	}
+}
+
+func TestGatedWriter_PreservesUnknownPrefixSequenceWhenActive(t *testing.T) {
+	var out bytes.Buffer
+	var active atomic.Bool
+	active.Store(true)
+
+	w := &gatedWriter{
+		dst:     &out,
+		active:  &active,
+		actions: &hostInputActions{},
+	}
+	input := []byte{hostCommandPrefix, 'x'}
+	if _, err := w.Write(input); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if !bytes.Equal(out.Bytes(), input) {
+		t.Fatalf("PTY received %v, want original sequence %v", out.Bytes(), input)
+	}
+}
+
 func TestRun_OnPTYReadyCalledWithMasterFile(t *testing.T) {
 	var out bytes.Buffer
 	var got *os.File
 
-	code := run([]string{"echo", "hi"}, nonTerminalStdin(t), &out, nil, func(f *os.File) { got = f }, nil, nil)
+	code := run([]string{"echo", "hi"}, nonTerminalStdin(t), &out, nil, func(f *os.File) { got = f }, nil, nil, nil)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)

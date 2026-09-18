@@ -13,7 +13,7 @@ import (
 )
 
 const usageText = `Usage:
-  getsloth [command [args...]]
+  getsloth [--remote] [command [args...]]
   getsloth --group [command [args...]]
 
 Modes:
@@ -55,6 +55,7 @@ func main() {
 	var isActiveWriter *atomic.Bool
 	var onPTYReady func(*os.File)
 	var onHostSize func(cols, rows int)
+	var inputActions *hostInputActions
 
 	ws, created, err := connectHost(relayURL, protocol.SessionConfigMsg{
 		Envelope: protocol.NewEnvelope("session_config"),
@@ -88,6 +89,9 @@ func main() {
 		active := &atomic.Bool{}
 		active.Store(true) // host starts as the active writer
 		isActiveWriter = active
+		status := newHostSessionStatus(mode, os.Stderr)
+		status.print()
+		fmt.Fprintln(os.Stderr, "getsloth: host controls: Ctrl-] r reclaim · Ctrl-] i status")
 
 		ptmxCh := make(chan *os.File, 1)
 		onPTYReady = func(f *os.File) { ptmxCh <- f }
@@ -99,18 +103,19 @@ func main() {
 			})
 		}
 
-		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr)
+		inputActions = &hostInputActions{
+			onReclaim: func() {
+				_ = ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
+			},
+			onStatus: status.print,
+		}
+
+		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr, status)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
 
-		// Host-triggered actions per docs/protocol.md: reclaiming
-		// control and the (soft) kill switch. v0 doesn't scan the
-		// host's raw keystroke stream for a hotkey (fragile - a byte
-		// matching the hotkey could legitimately appear split across
-		// two reads from a real program's output); a signal is a
-		// simpler, reliable "host-triggered" mechanism for the same
-		// intent, scriptable via `kill -USR2 <pid>` (reclaim control)
-		// or `kill -USR1 <pid>` (soft kill switch - disconnects
-		// viewers, session stays alive).
+		// Signals remain as scriptable alternatives to the host's local
+		// Ctrl-] command prefix: USR2 reclaims control and USR1 triggers
+		// the soft kill switch without ending the wrapped process.
 		signals := make(chan os.Signal, 2)
 		signal.Notify(signals, syscall.SIGUSR1, syscall.SIGUSR2)
 		go func() {
@@ -153,7 +158,7 @@ func main() {
 		close(panicKill)
 	}()
 
-	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, onHostSize, panicKill)
+	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, onHostSize, inputActions, panicKill)
 
 	if ws != nil {
 		// os.Exit below skips deferred functions, so cleanup happens
@@ -180,8 +185,10 @@ func commandFromArgs(args []string) []string {
 func launchFromArgs(args []string) (string, []string) {
 	mode := protocol.SessionModeRemote
 	commandStart := 1
-	if len(args) > 1 && args[1] == "--group" {
-		mode = protocol.SessionModeGroup
+	if len(args) > 1 && (args[1] == "--group" || args[1] == "--remote") {
+		if args[1] == "--group" {
+			mode = protocol.SessionModeGroup
+		}
 		commandStart = 2
 	}
 	if len(args) > commandStart && args[commandStart] == "--" {

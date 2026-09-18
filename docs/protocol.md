@@ -274,6 +274,14 @@ still read its own stdin but drop those keystrokes locally instead of
 writing them to the PTY, using the `control_changed` state it already
 has — this check is entirely local, no network call needed to make it.
 
+The host CLI reserves `Ctrl-]` as a local command prefix that is processed
+before this input gate. `Ctrl-] r` sends the host's authoritative
+`take_control`, so reclaim remains available while ordinary host keystrokes are
+being dropped. `Ctrl-] i` prints the current mode, viewers, connection state,
+and controller. The terminal/tab title carries the same compact status without
+consuming a PTY row; this avoids damaging full-screen TUIs. `SIGUSR2` remains a
+scriptable reclaim alternative.
+
 ## Browser terminal input
 
 The viewer uses xterm's normal keyboard/input path; there are no dedicated

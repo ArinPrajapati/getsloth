@@ -44,7 +44,7 @@ import (
 // malicious actor started would otherwise survive killing just the
 // shell. The wrapped command is spawned in its own process group
 // (Setpgid) specifically to make this possible.
-func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic.Bool, onPTYReady func(*os.File), onHostSize func(cols, rows int), panicKill <-chan struct{}) int {
+func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic.Bool, onPTYReady func(*os.File), onHostSize func(cols, rows int), inputActions *hostInputActions, panicKill <-chan struct{}) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "getsloth: no command given")
 		return 2
@@ -95,7 +95,7 @@ func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic
 	go func() {
 		dst := io.Writer(ptmx)
 		if isActiveWriter != nil {
-			dst = &gatedWriter{dst: ptmx, active: isActiveWriter}
+			dst = &gatedWriter{dst: ptmx, active: isActiveWriter, actions: inputActions}
 		}
 		_, _ = io.Copy(dst, stdin)
 	}()
@@ -130,15 +130,65 @@ func killProcessGroup(pid int) {
 // mirroring the relay silently dropping a non-active-writer viewer's
 // input rather than erroring.
 type gatedWriter struct {
-	dst    io.Writer
-	active *atomic.Bool
+	dst           io.Writer
+	active        *atomic.Bool
+	actions       *hostInputActions
+	prefixPending bool
 }
 
 func (g *gatedWriter) Write(p []byte) (int, error) {
-	if !g.active.Load() {
-		return len(p), nil
+	if g.actions == nil {
+		if !g.active.Load() {
+			return len(p), nil
+		}
+		return g.dst.Write(p)
 	}
-	return g.dst.Write(p)
+
+	forward := make([]byte, 0, len(p))
+	for _, value := range p {
+		if g.prefixPending {
+			g.prefixPending = false
+			switch value {
+			case 'r', 'R':
+				if g.actions.onReclaim != nil {
+					g.actions.onReclaim()
+				}
+				continue
+			case 'i', 'I':
+				if g.actions.onStatus != nil {
+					g.actions.onStatus()
+				}
+				continue
+			default:
+				if g.active.Load() {
+					forward = append(forward, hostCommandPrefix, value)
+				}
+				continue
+			}
+		}
+
+		if value == hostCommandPrefix {
+			g.prefixPending = true
+			continue
+		}
+		if g.active.Load() {
+			forward = append(forward, value)
+		}
+	}
+
+	if len(forward) > 0 {
+		if _, err := g.dst.Write(forward); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
+}
+
+const hostCommandPrefix byte = 0x1d // Ctrl-]
+
+type hostInputActions struct {
+	onReclaim func()
+	onStatus  func()
 }
 
 // watchResize keeps ptmx's window size matching stdin's terminal size,
