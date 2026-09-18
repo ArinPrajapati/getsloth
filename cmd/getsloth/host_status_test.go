@@ -48,6 +48,33 @@ func TestHostSessionStatus_GroupModeExplainsHostControl(t *testing.T) {
 	}
 }
 
+func TestHostSessionStatus_SnapshotProvidesConsoleData(t *testing.T) {
+	var out bytes.Buffer
+	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
+	status.updatePresence(protocol.PresenceMsg{Connections: []protocol.PresenceConnectionInfo{
+		{ID: "host", Role: "host"},
+		{ID: "viewer-2", Role: "viewer", DisplayName: "Phone", IsActiveWriter: true},
+		{ID: "viewer-1", Role: "viewer", DisplayName: "Laptop"},
+	}})
+
+	snapshot := status.snapshot()
+	if !snapshot.Live || snapshot.Mode != protocol.SessionModeRemote {
+		t.Fatalf("snapshot session = %+v, want a live remote session", snapshot)
+	}
+	if snapshot.ControllerID != "viewer-2" || snapshot.ControllerRole != "viewer" {
+		t.Errorf("snapshot controller = %q/%q, want viewer-2/viewer", snapshot.ControllerID, snapshot.ControllerRole)
+	}
+	if len(snapshot.Viewers) != 2 {
+		t.Fatalf("snapshot viewers = %+v, want two viewers", snapshot.Viewers)
+	}
+	if snapshot.Viewers[0].ID != "viewer-1" || snapshot.Viewers[0].Name != "Laptop" {
+		t.Errorf("first viewer = %+v, want sorted Laptop viewer", snapshot.Viewers[0])
+	}
+	if !snapshot.Viewers[1].IsController {
+		t.Errorf("controller viewer = %+v, want IsController true", snapshot.Viewers[1])
+	}
+}
+
 func TestHostSessionStatus_PrintWritesReadableStatus(t *testing.T) {
 	var out bytes.Buffer
 	status := newHostSessionStatus(protocol.SessionModeRemote, &out)

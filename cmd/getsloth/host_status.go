@@ -3,12 +3,27 @@ package main
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
 
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
+
+type hostControlViewer struct {
+	ID           string
+	Name         string
+	IsController bool
+}
+
+type hostControlSnapshot struct {
+	Live           bool
+	Mode           string
+	ControllerID   string
+	ControllerRole string
+	Viewers        []hostControlViewer
+}
 
 type hostSessionStatus struct {
 	mu               sync.Mutex
@@ -66,6 +81,31 @@ func (s *hostSessionStatus) setDisconnected() {
 	s.live = false
 	s.renderTitleLocked()
 	s.mu.Unlock()
+}
+
+func (s *hostSessionStatus) snapshot() hostControlSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	viewers := make([]hostControlViewer, 0, len(s.viewers))
+	for id, name := range s.viewers {
+		viewers = append(viewers, hostControlViewer{
+			ID:           id,
+			Name:         name,
+			IsController: s.activeWriterRole == "viewer" && s.activeWriterID == id,
+		})
+	}
+	sort.Slice(viewers, func(i, j int) bool {
+		return viewers[i].Name < viewers[j].Name
+	})
+
+	return hostControlSnapshot{
+		Live:           s.live,
+		Mode:           s.mode,
+		ControllerID:   s.activeWriterID,
+		ControllerRole: s.activeWriterRole,
+		Viewers:        viewers,
+	}
 }
 
 func (s *hostSessionStatus) summary() string {
