@@ -62,6 +62,10 @@ textarea {
   transform-origin: top left;
 }
 
+.mobile-terminal-helper {
+  display: none;
+}
+
 .session-status-bar {
   min-height: 42px;
   display: grid;
@@ -307,7 +311,46 @@ textarea {
 }
 
 @media (max-width: 700px) {
+  .viewer-shell {
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+
+  .terminal-stage {
+    grid-row: 1;
+  }
+
+  .mobile-terminal-helper {
+    grid-row: 2;
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #17130f;
+  }
+
+  .mobile-terminal-helper[hidden] {
+    display: none;
+  }
+
+  .mobile-terminal-helper-button {
+    min-width: 0;
+    min-height: 44px;
+    border: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    color: #f3eadb;
+    background: transparent;
+    font-size: 0.75rem;
+    font-weight: 700;
+    touch-action: manipulation;
+  }
+
+  .mobile-terminal-helper[data-control-armed="true"] .mobile-terminal-helper-button[data-terminal-key="ctrl"] {
+    color: #17130f;
+    background: #d7b56d;
+  }
+
   .session-status-bar {
+    grid-row: 3;
     min-height: 44px;
     grid-template-columns: 44px minmax(0, 1fr);
     padding-bottom: env(safe-area-inset-bottom);

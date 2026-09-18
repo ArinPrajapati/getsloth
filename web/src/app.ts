@@ -61,6 +61,8 @@ export function renderAppShell(root: HTMLElement): void {
   actionGroup.append(chatButton, typeButton, controlButton, settingsButton);
   statusBar.append(sessionGroup, focusText, actionGroup);
 
+  const terminalHelper = createMobileTerminalHelper();
+
   const overlayLayer = document.createElement('div');
   overlayLayer.className = 'viewer-overlays';
   overlayLayer.setAttribute('aria-label', 'Viewer overlays');
@@ -72,8 +74,36 @@ export function renderAppShell(root: HTMLElement): void {
   settingsPanel.append(createSettingsPanel());
   overlayLayer.append(chatPanel, controlPanel, settingsPanel);
 
-  main.append(terminal, overlayLayer, statusBar);
+  main.append(terminal, overlayLayer, terminalHelper, statusBar);
   root.append(main);
+}
+
+function createMobileTerminalHelper(): HTMLElement {
+  const row = document.createElement('nav');
+  row.className = 'mobile-terminal-helper';
+  row.setAttribute('aria-label', 'Terminal helper keys');
+  row.hidden = true;
+
+  for (const { label, key, ariaLabel } of [
+    { label: 'Esc', key: 'escape', ariaLabel: 'Escape' },
+    { label: 'Ctrl', key: 'ctrl', ariaLabel: 'Ctrl' },
+    { label: 'Tab', key: 'tab', ariaLabel: 'Tab' },
+    { label: '←', key: 'arrow-left', ariaLabel: 'Left' },
+    { label: '↑', key: 'arrow-up', ariaLabel: 'Up' },
+    { label: '↓', key: 'arrow-down', ariaLabel: 'Down' },
+    { label: '→', key: 'arrow-right', ariaLabel: 'Right' },
+    { label: 'Paste', key: 'paste', ariaLabel: 'Paste' }
+  ]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'mobile-terminal-helper-button';
+    button.dataset.terminalKey = key;
+    button.textContent = label;
+    button.setAttribute('aria-label', `Terminal helper: ${ariaLabel}`);
+    row.append(button);
+  }
+
+  return row;
 }
 
 function statusButton(label: string, panel: string): HTMLButtonElement {

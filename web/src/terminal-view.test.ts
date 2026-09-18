@@ -87,6 +87,21 @@ describe('createTerminalView', () => {
     expect(onInput).toHaveBeenCalledWith(new TextEncoder().encode('y'));
   });
 
+  it('sends the next typed letter as a Ctrl terminal byte after the mobile Ctrl helper is armed', () => {
+    const element = document.createElement('div');
+    const terminal = new FakeTerminal();
+    const onInput = vi.fn();
+
+    const view = createTerminalView(element, () => terminal, { onInput });
+    view.setActive(true);
+    view.setControlModifier(true);
+    terminal.type('c');
+    terminal.type('d');
+
+    expect([...((onInput.mock.calls[0]?.[0] as Uint8Array))]).toEqual([3]);
+    expect([...((onInput.mock.calls[1]?.[0] as Uint8Array))]).toEqual([100]);
+  });
+
   it('stops forwarding keystrokes once control is taken back', () => {
     const element = document.createElement('div');
     const terminal = new FakeTerminal();

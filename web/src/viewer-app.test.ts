@@ -239,6 +239,100 @@ describe('mountViewerApp', () => {
     expect(terminal.presentationMode).toBe('actual');
   });
 
+  it('shows mobile terminal helper keys only while typing and preserves the keyboard focus when they are tapped', async () => {
+    const root = document.createElement('div');
+    const terminal = new FakeTerminal();
+    const capturedOptions: RelayClientOptions[] = [];
+    const sentInput: number[][] = [];
+    const takeControl = vi.fn();
+    const keyboardInput = document.createElement('input');
+    document.body.append(keyboardInput);
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => terminal,
+      createClient: (clientOptions) => {
+        capturedOptions.push(clientOptions);
+        return {
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          sendAuth: vi.fn(),
+          sendChatMessage: vi.fn(),
+          sendInput: (bytes) => sentInput.push([...bytes]),
+          sendResize: vi.fn(),
+          sendTakeControl: takeControl
+        };
+      }
+    });
+
+    capturedOptions[0]?.onAuthResult?.({
+      v: 1,
+      type: 'auth_result',
+      ok: true,
+      connection_id: 'viewer-1',
+      mode: 'remote',
+      cols: 120,
+      rows: 36,
+      active_writer_id: 'host-1',
+      active_writer_role: 'host'
+    });
+
+    const helperRow = root.querySelector<HTMLElement>('[aria-label="Terminal helper keys"]');
+    expect(helperRow).not.toBeNull();
+    expect(helperRow?.hidden).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Focus terminal input"]')?.click();
+    expect(takeControl).toHaveBeenCalledWith(120, 36);
+
+    capturedOptions[0]?.onControlChanged?.({
+      v: 1,
+      type: 'control_changed',
+      active_writer_id: 'viewer-1',
+      active_writer_role: 'viewer',
+      cols: 120,
+      rows: 36
+    });
+    expect(helperRow?.hidden).toBe(false);
+
+    keyboardInput.focus();
+    const up = root.querySelector<HTMLButtonElement>('[aria-label="Terminal helper: Up"]');
+    up?.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+    up?.click();
+    expect(document.activeElement).toBe(keyboardInput);
+    expect(sentInput).toEqual([[27, 91, 65]]);
+
+    root.querySelector<HTMLButtonElement>('[aria-label="Terminal helper: Ctrl"]')?.click();
+    terminal.type('c');
+    expect(sentInput).toEqual([[27, 91, 65], [3]]);
+
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { readText: vi.fn().mockResolvedValue('paste') }
+    });
+    root.querySelector<HTMLButtonElement>('[aria-label="Terminal helper: Paste"]')?.click();
+    await Promise.resolve();
+    expect(sentInput).toEqual([[27, 91, 65], [3], [112, 97, 115, 116, 101]]);
+    if (clipboard) {
+      Object.defineProperty(navigator, 'clipboard', clipboard);
+    } else {
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    }
+
+    capturedOptions[0]?.onControlChanged?.({
+      v: 1,
+      type: 'control_changed',
+      active_writer_id: 'host-1',
+      active_writer_role: 'host',
+      cols: 120,
+      rows: 36
+    });
+    expect(helperRow?.hidden).toBe(true);
+
+    keyboardInput.remove();
+  });
+
   it('makes group sessions visibly read-only while keeping chat and view settings', () => {
     const root = document.createElement('div');
     const terminal = new FakeTerminal();
@@ -276,7 +370,7 @@ describe('mountViewerApp', () => {
     expect(takeControl).not.toHaveBeenCalled();
   });
 
-  it('blurs mobile text entry when a non-typing surface is tapped', () => {
+  it('keeps mobile text entry focused when the terminal is tapped', () => {
     const root = document.createElement('div');
     const terminal = new FakeTerminal();
     const outsideInput = document.createElement('input');
@@ -294,7 +388,7 @@ describe('mountViewerApp', () => {
 
     root.querySelector<HTMLElement>('[aria-label="Terminal output"]')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
 
-    expect(document.activeElement).not.toBe(outsideInput);
+    expect(document.activeElement).toBe(outsideInput);
     expect(terminal.focusCalls).toBe(0);
 
     outsideInput.remove();

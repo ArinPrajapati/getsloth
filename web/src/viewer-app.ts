@@ -3,6 +3,7 @@ import { createAuthGate } from './auth-gate';
 import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } from './auth';
 import { createChatPanel } from './chat-panel';
 import { createControlPanel } from './control-panel';
+import { mobileTerminalKeyBytes, type MobileTerminalKey } from './mobile-terminal-keys';
 import { createSessionState } from './session-state';
 import { createTerminalView, type TerminalLike, type TerminalPresentationMode, type TerminalSize } from './terminal-view';
 import type { SessionMode } from './protocol';
@@ -38,15 +39,17 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const chatOverlay = root.querySelector<HTMLElement>('[data-panel="chat"]');
   const controlOverlay = root.querySelector<HTMLElement>('[data-panel="control"]');
   const statusBar = root.querySelector<HTMLElement>('[aria-label="Session status bar"]');
+  const terminalHelper = root.querySelector<HTMLElement>('[aria-label="Terminal helper keys"]');
   const typeButton = root.querySelector<HTMLButtonElement>('[aria-label="Focus terminal input"]');
   const controlButton = root.querySelector<HTMLButtonElement>('[aria-label="Open session control"]');
 
-  if (!terminalCard || !terminalElement || !connectionStatus || !activeWriterStatus || !chatOverlay || !controlOverlay || !statusBar || !typeButton || !controlButton) {
+  if (!terminalCard || !terminalElement || !connectionStatus || !activeWriterStatus || !chatOverlay || !controlOverlay || !statusBar || !terminalHelper || !typeButton || !controlButton) {
     throw new Error('Viewer shell did not render required regions');
   }
 
   const activeWriterStatusElement = activeWriterStatus;
   const controlOverlayElement = controlOverlay;
+  const terminalHelperElement = terminalHelper;
   const typeButtonElement = typeButton;
   const controlButtonElement = controlButton;
 
@@ -76,7 +79,9 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const sessionState = createSessionState(root);
   let localConnectionId: string | null = null;
   let sessionMode: SessionMode = 'remote';
+  let isActiveWriter = false;
   let focusWhenControlArrives = false;
+  let controlModifierArmed = false;
   const chatPanel = createChatPanel(chatOverlay, {
     onSend: (text) => {
       client.sendChatMessage(text);
@@ -88,13 +93,58 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   });
   wireStatusBar(root, {
     onType: requestControl,
+    onLeaveTyping: leaveTyping,
     onPresentationMode: (mode) => {
       terminal.setPresentationMode(mode);
     }
   });
+  wireTerminalHelper(terminalHelperElement, {
+    onKey: (key) => {
+      terminal.sendInput(mobileTerminalKeyBytes(key));
+    },
+    onControl: () => {
+      controlModifierArmed = !controlModifierArmed;
+      terminal.setControlModifier(controlModifierArmed);
+      terminalHelperElement.dataset.controlArmed = String(controlModifierArmed);
+    },
+    onPaste: () => {
+      void pasteTerminalInput();
+    }
+  });
+
+  async function pasteTerminalInput(): Promise<void> {
+    try {
+      const text = await navigator.clipboard.readText();
+      terminal.sendInput(new TextEncoder().encode(text));
+    } catch {
+      // Clipboard access can be denied by a browser or embedded web view.
+      // The visible status preserves typing mode and points to the OS fallback.
+      activeWriterStatusElement.textContent = 'paste unavailable';
+    }
+  }
+
+  function setTyping(active: boolean): void {
+    const typing = active && sessionMode === 'remote' && isActiveWriter;
+    terminalHelperElement.hidden = !typing;
+    if (!typing) {
+      controlModifierArmed = false;
+      terminal.setControlModifier(false);
+      delete terminalHelperElement.dataset.controlArmed;
+    }
+  }
+
+  function leaveTyping(): void {
+    setTyping(false);
+  }
 
   function requestControl(): void {
     if (sessionMode === 'group') {
+      return;
+    }
+
+    if (isActiveWriter) {
+      terminal.focus();
+      setTyping(true);
       return;
     }
 
@@ -113,12 +163,13 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     if (isGroup) {
       controlOverlayElement.hidden = true;
       activeWriterStatusElement.textContent = 'group · view only';
+      setTyping(false);
     }
   }
 
   function applyControl(activeWriterId: string, activeWriterRole: 'host' | 'viewer', size: TerminalSize): void {
     terminal.setCanonicalSize(size);
-    const isActiveWriter = sessionMode === 'remote' && activeWriterId === localConnectionId;
+    isActiveWriter = sessionMode === 'remote' && activeWriterId === localConnectionId;
     terminal.setActive(isActiveWriter);
     controlPanel.updateControl({
       active_writer_id: activeWriterId,
@@ -132,9 +183,15 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
 
     activeWriterStatusElement.textContent = isActiveWriter ? 'you driving' : `${roleLabel(activeWriterRole)} driving`;
 
-    if (isActiveWriter && focusWhenControlArrives) {
+    if (!isActiveWriter) {
+      setTyping(false);
+      return;
+    }
+
+    if (focusWhenControlArrives) {
       focusWhenControlArrives = false;
       terminal.focus();
+      setTyping(true);
     }
   }
   const gate = createAuthGate(root, {
@@ -259,8 +316,39 @@ function statusTextFor(state: ConnectionState): string {
   return 'Waiting for session';
 }
 
+interface TerminalHelperOptions {
+  onKey(key: MobileTerminalKey): void;
+  onControl(): void;
+  onPaste(): void;
+}
+
+function wireTerminalHelper(helper: HTMLElement, options: TerminalHelperOptions): void {
+  for (const button of helper.querySelectorAll<HTMLButtonElement>('[data-terminal-key]')) {
+    button.addEventListener('pointerdown', (event) => {
+      // A button focus would dismiss the mobile OS keyboard. Keep xterm's
+      // textarea focused while still allowing the following click to fire.
+      event.preventDefault();
+    });
+    button.addEventListener('click', () => {
+      const key = button.dataset.terminalKey;
+      if (key === 'ctrl') {
+        options.onControl();
+      } else if (key === 'paste') {
+        options.onPaste();
+      } else if (isMobileTerminalKey(key)) {
+        options.onKey(key);
+      }
+    });
+  }
+}
+
+function isMobileTerminalKey(key: string | undefined): key is MobileTerminalKey {
+  return key === 'escape' || key === 'tab' || key === 'arrow-left' || key === 'arrow-up' || key === 'arrow-down' || key === 'arrow-right';
+}
+
 interface StatusBarOptions {
   onType(): void;
+  onLeaveTyping(): void;
   onPresentationMode(mode: TerminalPresentationMode): void;
 }
 
@@ -279,21 +367,6 @@ function wireStatusBar(root: HTMLElement, options: StatusBarOptions): void {
     }
   }
 
-  function blurTextEntryForNonTypingTap(event: Event): void {
-    const target = event.target;
-
-    if (!(target instanceof HTMLElement) || isTextEntryTarget(target) || target.closest('[data-panel="type"]')) {
-      return;
-    }
-
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-  }
-
-  root.addEventListener('pointerdown', blurTextEntryForNonTypingTap);
-  root.addEventListener('mousedown', blurTextEntryForNonTypingTap);
-
   for (const button of buttons) {
     button.setAttribute('aria-pressed', 'false');
     button.addEventListener('click', () => {
@@ -303,6 +376,7 @@ function wireStatusBar(root: HTMLElement, options: StatusBarOptions): void {
         return;
       }
 
+      options.onLeaveTyping();
       const panelName = button.dataset.panel ?? null;
       const shouldClose = panelName !== null && !root.querySelector<HTMLElement>(`.viewer-overlay[data-panel="${panelName}"]`)?.hidden;
       showPanel(shouldClose ? null : panelName);
@@ -315,9 +389,6 @@ function wireStatusBar(root: HTMLElement, options: StatusBarOptions): void {
   });
 }
 
-function isTextEntryTarget(target: HTMLElement): boolean {
-  return target.closest('input, textarea, select, [contenteditable="true"]') !== null;
-}
 
 function roleLabel(role: 'host' | 'viewer'): string {
   return role === 'host' ? 'host' : 'viewer';
