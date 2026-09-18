@@ -1,4 +1,5 @@
 import { createTerminalView, type TerminalLike } from './terminal-view';
+import { MAX_INPUT_BYTES } from './protocol';
 
 class FakeTerminal implements TerminalLike {
   openedIn: HTMLElement | null = null;
@@ -68,5 +69,18 @@ describe('createTerminalView', () => {
     terminal.type('y');
 
     expect(onInput).not.toHaveBeenCalled();
+  });
+
+  it('truncates a pasted chunk to the protocol byte limit instead of getting the connection closed', () => {
+    const element = document.createElement('div');
+    const terminal = new FakeTerminal();
+    const onInput = vi.fn();
+
+    const view = createTerminalView(element, () => terminal, { onInput });
+    view.setActive(true);
+    terminal.type('a'.repeat(MAX_INPUT_BYTES + 500));
+
+    const sent = onInput.mock.calls[0]?.[0] as Uint8Array;
+    expect(sent.length).toBeLessThanOrEqual(MAX_INPUT_BYTES);
   });
 });

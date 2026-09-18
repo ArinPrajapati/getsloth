@@ -1,3 +1,5 @@
+import { MAX_INPUT_BYTES, truncateToByteLimit } from './protocol';
+
 export interface TerminalLike {
   open(element: HTMLElement): void;
   write(data: Uint8Array): void;
@@ -13,12 +15,13 @@ export interface TerminalViewOptions {
   onInput?(bytes: Uint8Array): void;
 }
 
-const textEncoder = new TextEncoder();
-
 // Typed keystrokes are only ever forwarded while this viewer is the active
 // writer - matches F4's requirement that a non-active-writer's local
 // keystrokes never get sent, so the UI doesn't imply a keypress did
-// something the relay would silently drop (docs/protocol.md).
+// something the relay would silently drop (docs/protocol.md). Every chunk
+// is also truncated to the protocol's input byte limit before sending - a
+// paste can hand xterm's onData a single large chunk, and exceeding the
+// limit closes the whole connection (see MAX_INPUT_BYTES).
 export function createTerminalView(
   element: HTMLElement,
   createTerminal: () => TerminalLike,
@@ -34,7 +37,7 @@ export function createTerminalView(
       return;
     }
 
-    options.onInput?.(textEncoder.encode(data));
+    options.onInput?.(truncateToByteLimit(data, MAX_INPUT_BYTES));
   });
 
   return {

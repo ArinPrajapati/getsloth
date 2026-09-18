@@ -175,6 +175,37 @@ export function decodeBase64Bytes(value: string): Uint8Array {
   return bytes;
 }
 
+// docs/protocol.md Limits: input.data_base64, decoded, must be <= 4096
+// bytes — violation closes the WHOLE connection (BAD_REQUEST, close code
+// 4002), not just the one message, so every input path (quick actions,
+// typed keystrokes) has to enforce this client-side before sending.
+export const MAX_INPUT_BYTES = 4096;
+
+const textEncoder = new TextEncoder();
+
+export function truncateToByteLimit(text: string, maxBytes: number): Uint8Array {
+  const bytes = textEncoder.encode(text);
+
+  if (bytes.length <= maxBytes) {
+    return bytes;
+  }
+
+  // Back off byte-by-byte until the prefix is valid UTF-8 again, so the cut
+  // never lands inside a multi-byte character.
+  let end = maxBytes;
+
+  while (end > 0) {
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(bytes.slice(0, end));
+      return bytes.slice(0, end);
+    } catch {
+      end -= 1;
+    }
+  }
+
+  return new Uint8Array(0);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
