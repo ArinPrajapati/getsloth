@@ -7,6 +7,14 @@ import (
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
+func TestHostControlKeyAction_MapsVisibleControls(t *testing.T) {
+	for key, want := range map[byte]string{'r': "reclaim", 'R': "reclaim", 'k': "kill", 'K': "kill", 'q': "quit", 'i': "snapshot"} {
+		if got := hostControlKeyAction(key); got != want {
+			t.Errorf("hostControlKeyAction(%q) = %q, want %q", key, got, want)
+		}
+	}
+}
+
 func TestHostControlArguments_RecognizesWatchMode(t *testing.T) {
 	socketPath, action, watch, ok := hostControlArguments([]string{"--socket", "/tmp/getsloth.sock", "--watch"})
 	if !ok || socketPath != "/tmp/getsloth.sock" || action != "snapshot" || !watch {

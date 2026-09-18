@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 )
 
 func runHostControlConsole(args []string, out io.Writer) int {
@@ -62,13 +65,64 @@ func hostControlArguments(args []string) (socketPath, action string, watch, ok b
 	return "", "", false, false
 }
 
+func hostControlKeyAction(key byte) string {
+	switch key {
+	case 'r', 'R':
+		return "reclaim"
+	case 'k', 'K':
+		return "kill"
+	case 'q', 'Q':
+		return "quit"
+	case 'i', 'I':
+		return "snapshot"
+	default:
+		return ""
+	}
+}
+
 func watchHostControlConsole(socketPath string, out io.Writer) int {
+	keypresses := make(chan byte, 1)
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err == nil {
+			defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+			go readHostControlKeys(os.Stdin, keypresses)
+		}
+	}
+
 	for {
 		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
 		if code := runHostControlConsole([]string{"--socket", socketPath}, out); code != 0 {
 			return code
 		}
-		time.Sleep(time.Second)
+
+		select {
+		case key := <-keypresses:
+			action := hostControlKeyAction(key)
+			if action == "quit" {
+				return 0
+			}
+			if action == "reclaim" || action == "kill" {
+				_ = runHostControlConsole([]string{"--socket", socketPath, "--action", action}, io.Discard)
+			}
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func readHostControlKeys(input *os.File, keypresses chan<- byte) {
+	buffer := make([]byte, 64)
+	for {
+		count, err := input.Read(buffer)
+		if err != nil {
+			return
+		}
+		for _, key := range buffer[:count] {
+			select {
+			case keypresses <- key:
+			default:
+			}
+		}
 	}
 }
 
