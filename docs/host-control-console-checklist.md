@@ -53,13 +53,13 @@ Password    9UGRUL7Xnb
 
 ## Required controls
 
-- [ ] `[r] reclaim` / take host control back from the active viewer.
-- [ ] `[k] kill viewers` / disconnect all viewers while keeping the host session alive.
-- [ ] `[i] invite` / show invite URL and password clearly.
-- [ ] `[c] copy` / copy invite details when clipboard support is available.
-- [ ] `[q] quit console` / close only the control console, not the shared session.
-- [ ] Mouse click support for visible buttons when the terminal supports mouse events.
-- [ ] Keyboard fallback for every clickable control.
+- [x] `[r] reclaim` / take host control back from the active viewer.
+- [x] `[k] kill viewers` / disconnect all viewers while keeping the host session alive.
+- [x] `[i] invite` / show invite URL and password clearly (toggles reveal; hidden by default).
+- [x] `[c] copy` / copy invite details when clipboard support is available (OSC52; independent of the `[i]` reveal toggle).
+- [x] `[q] quit console` / close only the control console, not the shared session (`tea.Quit` stops only this program).
+- [x] Mouse click support for visible buttons when the terminal supports mouse events.
+- [x] Keyboard fallback for every clickable control (mouse clicks route through the same key-action handler).
 
 ## Main session behavior
 

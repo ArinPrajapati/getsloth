@@ -72,6 +72,87 @@ func TestRenderHostControlDashboard_RevealsInviteWhenRequested(t *testing.T) {
 	}
 }
 
+func TestHostControlKeybarRegions_AreOrderedAndNonOverlapping(t *testing.T) {
+	regions := hostControlKeybarRegions(false)
+	wantKeys := []byte{'r', 'k', 'i', 'c', 'q'}
+	if len(regions) != len(wantKeys) {
+		t.Fatalf("got %d keybar regions, want %d", len(regions), len(wantKeys))
+	}
+	for idx, region := range regions {
+		if region.Key != wantKeys[idx] {
+			t.Errorf("region[%d].Key = %q, want %q", idx, region.Key, wantKeys[idx])
+		}
+		if region.EndCol <= region.StartCol {
+			t.Errorf("region[%d] has empty span: %+v", idx, region)
+		}
+		if idx > 0 && region.StartCol < regions[idx-1].EndCol {
+			t.Errorf("region[%d] overlaps region[%d]: %+v, %+v", idx, idx-1, regions[idx-1], region)
+		}
+	}
+}
+
+func TestHostControlTUI_MouseClickTriggersKeybarAction(t *testing.T) {
+	server, err := startHostControlServer(func() hostControlSnapshot { return hostControlSnapshot{} })
+	if err != nil {
+		t.Fatalf("startHostControlServer: %v", err)
+	}
+	t.Cleanup(func() { _ = server.Close() })
+
+	called := false
+	server.setActions(func() error {
+		called = true
+		return nil
+	}, nil)
+
+	model := newHostControlTUI(server.socketPath, &bytes.Buffer{}, hostControlSnapshot{})
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model = updated.(hostControlTUI)
+
+	regions := hostControlKeybarRegions(model.showInvite)
+	var reclaim hostControlButtonRegion
+	for _, region := range regions {
+		if region.Key == 'r' {
+			reclaim = region
+		}
+	}
+	if reclaim.EndCol == 0 {
+		t.Fatal("did not find reclaim button region")
+	}
+
+	click := tea.MouseMsg{X: reclaim.StartCol + 1, Y: 1, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
+	_, cmd := model.Update(click)
+	if cmd == nil {
+		t.Fatal("clicking the reclaim button produced no command")
+	}
+	cmd()
+
+	if !called {
+		t.Fatal("clicking the reclaim button did not send the reclaim action")
+	}
+}
+
+func TestHostControlTUI_CopyKeyCopiesInviteWithoutTogglingReveal(t *testing.T) {
+	var out bytes.Buffer
+	model := newHostControlTUI("/tmp/getsloth.sock", &out, hostControlSnapshot{
+		InviteURL: "https://127.0.0.1:5173/s/example",
+		Password:  "sloth-demo",
+	})
+
+	updated, cmd := model.Update(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("c")}))
+	model = updated.(hostControlTUI)
+	if model.showInvite {
+		t.Fatal("pressing 'c' should not reveal the credentials in the dashboard")
+	}
+	if cmd == nil {
+		t.Fatal("pressing 'c' produced no command")
+	}
+	cmd()
+
+	if !bytes.Contains(out.Bytes(), []byte("\x1b]52;")) {
+		t.Errorf("pressing 'c' should copy the invite via an OSC52 sequence, got %q", out.Bytes())
+	}
+}
+
 func TestHostControlTUI_ToggleInviteKeyRevealsAndHidesCredentials(t *testing.T) {
 	var out bytes.Buffer
 	model := newHostControlTUI("/tmp/getsloth.sock", &out, hostControlSnapshot{

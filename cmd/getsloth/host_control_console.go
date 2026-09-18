@@ -74,6 +74,8 @@ func hostControlKeyAction(key byte) string {
 		return "quit"
 	case 'i', 'I':
 		return "snapshot"
+	case 'c', 'C':
+		return "copy"
 	default:
 		return ""
 	}

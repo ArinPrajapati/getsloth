@@ -49,20 +49,38 @@ func (m hostControlTUI) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if len(key) == 0 {
 			return m, nil
 		}
-		action := hostControlKeyAction(key[0])
-		if action == "quit" {
-			return m, tea.Quit
-		}
-		if action == "reclaim" || action == "kill" {
-			return m, hostControlActionCmd(m.socketPath, action)
-		}
-		if action == "snapshot" {
-			m.showInvite = !m.showInvite
-			if m.showInvite {
-				return m, hostControlCopyInviteCmd(m.out, m.snapshot)
-			}
+		return m.handleControlKey(key[0])
+	case tea.MouseMsg:
+		if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft || msg.Y != hostControlKeybarRow {
 			return m, nil
 		}
+		for _, region := range hostControlKeybarRegions(m.showInvite) {
+			if msg.X >= region.StartCol && msg.X < region.EndCol {
+				return m.handleControlKey(region.Key)
+			}
+		}
+	}
+	return m, nil
+}
+
+// hostControlKeybarRow is the line the keybar renders on within the
+// dashboard view: header (0), keybar (1), then a blank line and the body.
+const hostControlKeybarRow = 1
+
+func (m hostControlTUI) handleControlKey(key byte) (tea.Model, tea.Cmd) {
+	switch hostControlKeyAction(key) {
+	case "quit":
+		return m, tea.Quit
+	case "reclaim", "kill":
+		return m, hostControlActionCmd(m.socketPath, hostControlKeyAction(key))
+	case "snapshot":
+		m.showInvite = !m.showInvite
+		if m.showInvite {
+			return m, hostControlCopyInviteCmd(m.out, m.snapshot)
+		}
+		return m, nil
+	case "copy":
+		return m, hostControlCopyInviteCmd(m.out, m.snapshot)
 	}
 	return m, nil
 }

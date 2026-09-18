@@ -16,6 +16,64 @@ var (
 	controlPanel       = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
 )
 
+// hostControlButtonRegion is a clickable keybar button's key and the
+// terminal columns it occupies on the keybar row (row index 1 in the
+// rendered dashboard), so mouse clicks can be mapped back to a key action.
+type hostControlButtonRegion struct {
+	Key      byte
+	StartCol int
+	EndCol   int // exclusive
+}
+
+func hostControlKeybarButtons(showInvite bool) []struct {
+	key      byte
+	rendered string
+} {
+	inviteText := "INVITE"
+	if showInvite {
+		inviteText = "HIDE"
+	}
+	return []struct {
+		key      byte
+		rendered string
+	}{
+		{'r', controlKeyStyle.Render("[r]") + " RECLAIM"},
+		{'k', controlDangerStyle.Render("[k]") + " KILL VIEWERS"},
+		{'i', controlKeyStyle.Render("[i]") + " " + inviteText},
+		{'c', controlKeyStyle.Render("[c]") + " COPY"},
+		{'q', controlMutedStyle.Render("[q] CLOSE")},
+	}
+}
+
+const hostControlKeybarGap = 3
+
+func renderHostControlKeybar(showInvite bool) string {
+	buttons := hostControlKeybarButtons(showInvite)
+	rendered := make([]string, len(buttons))
+	for idx, button := range buttons {
+		rendered[idx] = button.rendered
+	}
+	return strings.Join(rendered, strings.Repeat(" ", hostControlKeybarGap))
+}
+
+// hostControlKeybarRegions computes the clickable column range for each
+// keybar button, in the same order and spacing renderHostControlKeybar
+// uses, so a mouse click's X coordinate can be matched to a button.
+func hostControlKeybarRegions(showInvite bool) []hostControlButtonRegion {
+	buttons := hostControlKeybarButtons(showInvite)
+	regions := make([]hostControlButtonRegion, 0, len(buttons))
+	col := 0
+	for idx, button := range buttons {
+		if idx > 0 {
+			col += hostControlKeybarGap
+		}
+		width := lipgloss.Width(button.rendered)
+		regions = append(regions, hostControlButtonRegion{Key: button.key, StartCol: col, EndCol: col + width})
+		col += width
+	}
+	return regions
+}
+
 func renderHostControlDashboard(snapshot hostControlSnapshot, width int, showInvite bool) string {
 	if width < 48 {
 		width = 48
@@ -31,12 +89,7 @@ func renderHostControlDashboard(snapshot hostControlSnapshot, width int, showInv
 		strings.Repeat(" ", maxDashboardWidth(contentWidth-42, 2)),
 		live,
 	)
-	keybar := strings.Join([]string{
-		controlKeyStyle.Render("[r]") + " RECLAIM",
-		controlDangerStyle.Render("[k]") + " KILL VIEWERS",
-		controlKeyStyle.Render("[i]") + " INVITE",
-		controlMutedStyle.Render("[q] CLOSE"),
-	}, "   ")
+	keybar := renderHostControlKeybar(showInvite)
 
 	controller := "host"
 	if snapshot.ControllerRole == "viewer" {
