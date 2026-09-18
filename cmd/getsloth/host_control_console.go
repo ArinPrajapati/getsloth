@@ -1,0 +1,92 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"strings"
+)
+
+func runHostControlConsole(args []string, out io.Writer) int {
+	socketPath, ok := hostControlSocketPath(args)
+	if !ok {
+		_, _ = fmt.Fprintln(out, "getsloth control: usage: getsloth control --socket <path>")
+		return 2
+	}
+
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "getsloth control: connect to host session: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := json.NewEncoder(conn).Encode(hostControlRequest{Action: "snapshot"}); err != nil {
+		_, _ = fmt.Fprintf(out, "getsloth control: request host status: %v\n", err)
+		return 1
+	}
+
+	var response hostControlResponse
+	if err := json.NewDecoder(conn).Decode(&response); err != nil {
+		_, _ = fmt.Fprintf(out, "getsloth control: read host status: %v\n", err)
+		return 1
+	}
+	if response.Error != "" {
+		_, _ = fmt.Fprintf(out, "getsloth control: %s\n", response.Error)
+		return 1
+	}
+	if response.Snapshot == nil {
+		_, _ = fmt.Fprintln(out, "getsloth control: host returned no session status")
+		return 1
+	}
+
+	renderHostControlSnapshot(out, *response.Snapshot)
+	return 0
+}
+
+func hostControlSocketPath(args []string) (string, bool) {
+	if len(args) == 2 && args[0] == "--socket" && args[1] != "" {
+		return args[1], true
+	}
+	return "", false
+}
+
+func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {
+	live := "OFFLINE"
+	if snapshot.Live {
+		live = "LIVE"
+	}
+
+	controller := "host controls"
+	if snapshot.ControllerRole == "viewer" {
+		controller = "viewer controls"
+		for _, viewer := range snapshot.Viewers {
+			if viewer.ID == snapshot.ControllerID {
+				controller = viewer.Name + " controls"
+				break
+			}
+		}
+	}
+
+	viewerCount := len(snapshot.Viewers)
+
+	_, _ = fmt.Fprintln(out, "GETSLOTH CONTROL")
+	_, _ = fmt.Fprintf(out, "Session     %s\n", live)
+	_, _ = fmt.Fprintf(out, "Mode        %s\n", modeLabel(snapshot.Mode))
+	_, _ = fmt.Fprintf(out, "Viewers     %d connected\n", viewerCount)
+	_, _ = fmt.Fprintf(out, "Controller  %s\n", controller)
+	if snapshot.InviteURL != "" {
+		_, _ = fmt.Fprintf(out, "URL         %s\n", snapshot.InviteURL)
+	}
+	if snapshot.Password != "" {
+		_, _ = fmt.Fprintf(out, "Password    %s\n", snapshot.Password)
+	}
+	if viewerCount > 0 {
+		names := make([]string, 0, viewerCount)
+		for _, viewer := range snapshot.Viewers {
+			names = append(names, viewer.Name)
+		}
+		_, _ = fmt.Fprintf(out, "Connected   %s\n", strings.Join(names, ", "))
+	}
+}

@@ -51,6 +51,7 @@ func TestHostSessionStatus_GroupModeExplainsHostControl(t *testing.T) {
 func TestHostSessionStatus_SnapshotProvidesConsoleData(t *testing.T) {
 	var out bytes.Buffer
 	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
+	status.setInvite("https://getsloth.dev/s/example", "host-only-password")
 	status.updatePresence(protocol.PresenceMsg{Connections: []protocol.PresenceConnectionInfo{
 		{ID: "host", Role: "host"},
 		{ID: "viewer-2", Role: "viewer", DisplayName: "Phone", IsActiveWriter: true},
@@ -60,6 +61,9 @@ func TestHostSessionStatus_SnapshotProvidesConsoleData(t *testing.T) {
 	snapshot := status.snapshot()
 	if !snapshot.Live || snapshot.Mode != protocol.SessionModeRemote {
 		t.Fatalf("snapshot session = %+v, want a live remote session", snapshot)
+	}
+	if snapshot.InviteURL != "https://getsloth.dev/s/example" || snapshot.Password != "host-only-password" {
+		t.Errorf("snapshot invite = %q/%q", snapshot.InviteURL, snapshot.Password)
 	}
 	if snapshot.ControllerID != "viewer-2" || snapshot.ControllerRole != "viewer" {
 		t.Errorf("snapshot controller = %q/%q, want viewer-2/viewer", snapshot.ControllerID, snapshot.ControllerRole)

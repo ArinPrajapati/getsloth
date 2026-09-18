@@ -22,6 +22,9 @@ Modes:
 `
 
 func main() {
+	if args, ok := hostControlCommandArgs(os.Args); ok {
+		os.Exit(runHostControlConsole(args, os.Stdout))
+	}
 	if wantsHelp(os.Args) {
 		if _, err := io.WriteString(os.Stdout, usageText); err != nil {
 			os.Exit(1)
@@ -171,6 +174,13 @@ func main() {
 	}
 
 	os.Exit(exitCode)
+}
+
+func hostControlCommandArgs(args []string) ([]string, bool) {
+	if len(args) > 1 && args[1] == "control" {
+		return args[2:], true
+	}
+	return nil, false
 }
 
 func wantsHelp(args []string) bool {

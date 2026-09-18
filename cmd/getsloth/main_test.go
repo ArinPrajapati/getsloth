@@ -8,6 +8,19 @@ import (
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
+func TestHostControlCommandIsReservedForTheLocalConsole(t *testing.T) {
+	args, ok := hostControlCommandArgs([]string{"getsloth", "control", "--socket", "/tmp/getsloth.sock"})
+	if !ok {
+		t.Fatal("control command was not recognized")
+	}
+	if want := []string{"--socket", "/tmp/getsloth.sock"}; !reflect.DeepEqual(args, want) {
+		t.Errorf("control args = %#v, want %#v", args, want)
+	}
+	if _, ok := hostControlCommandArgs([]string{"getsloth", "control-plane"}); ok {
+		t.Fatal("wrapped command resembling control was incorrectly reserved")
+	}
+}
+
 func TestUsageExplainsSessionModePermissions(t *testing.T) {
 	usage := strings.ToLower(usageText)
 	for _, phrase := range []string{"Remote mode", "one remote viewer", "Group mode", "view and chat", "host keeps control"} {

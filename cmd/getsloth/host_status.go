@@ -20,6 +20,8 @@ type hostControlViewer struct {
 type hostControlSnapshot struct {
 	Live           bool
 	Mode           string
+	InviteURL      string
+	Password       string
 	ControllerID   string
 	ControllerRole string
 	Viewers        []hostControlViewer
@@ -28,6 +30,8 @@ type hostControlSnapshot struct {
 type hostSessionStatus struct {
 	mu               sync.Mutex
 	mode             string
+	inviteURL        string
+	password         string
 	viewers          map[string]string
 	activeWriterID   string
 	activeWriterRole string
@@ -46,6 +50,13 @@ func newHostSessionStatus(mode string, out io.Writer) *hostSessionStatus {
 	}
 	status.renderTitleLocked()
 	return status
+}
+
+func (s *hostSessionStatus) setInvite(inviteURL, password string) {
+	s.mu.Lock()
+	s.inviteURL = inviteURL
+	s.password = password
+	s.mu.Unlock()
 }
 
 func (s *hostSessionStatus) updatePresence(msg protocol.PresenceMsg) {
@@ -102,6 +113,8 @@ func (s *hostSessionStatus) snapshot() hostControlSnapshot {
 	return hostControlSnapshot{
 		Live:           s.live,
 		Mode:           s.mode,
+		InviteURL:      s.inviteURL,
+		Password:       s.password,
 		ControllerID:   s.activeWriterID,
 		ControllerRole: s.activeWriterRole,
 		Viewers:        viewers,
