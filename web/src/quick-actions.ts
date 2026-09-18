@@ -1,3 +1,5 @@
+import { MAX_INPUT_BYTES, truncateToByteLimit } from './protocol';
+
 export type QuickAction =
   | { action: 'yes' }
   | { action: 'no' }
@@ -9,11 +11,6 @@ export interface QuickActionsOptions {
 }
 
 const textEncoder = new TextEncoder();
-
-// docs/protocol.md Limits: input.data_base64, decoded, must be <= 4096 bytes
-// — the relay closes the whole connection (BAD_REQUEST, close code 4002) on
-// violation, not just the one message, so this has to be enforced client-side.
-const MAX_INPUT_BYTES = 4096;
 
 export function quickActionBytes(action: QuickAction): Uint8Array {
   if (action.action === 'yes') {
@@ -34,29 +31,6 @@ export function quickActionBytes(action: QuickAction): Uint8Array {
   bytes.set(textBytes);
   bytes.set(carriageReturn, textBytes.length);
   return bytes;
-}
-
-function truncateToByteLimit(text: string, maxBytes: number): Uint8Array {
-  const bytes = textEncoder.encode(text);
-
-  if (bytes.length <= maxBytes) {
-    return bytes;
-  }
-
-  // Back off byte-by-byte until the prefix is valid UTF-8 again, so the cut
-  // never lands inside a multi-byte character.
-  let end = maxBytes;
-
-  while (end > 0) {
-    try {
-      new TextDecoder('utf-8', { fatal: true }).decode(bytes.slice(0, end));
-      return bytes.slice(0, end);
-    } catch {
-      end -= 1;
-    }
-  }
-
-  return new Uint8Array(0);
 }
 
 export interface QuickActionsHandle {

@@ -15,18 +15,25 @@ token format). Phase 1 can start.
 
 ## Phase 1A: Backend (Go) — CLI + Relay — assigned to Claude
 - [x] B1: Go module scaffold + tooling wired to CONSTRAINTS.md
-- [ ] B2: PTY wrapping — `getsloth <command>` works standalone
-- [ ] B3: Relay server skeleton — sessions, host + viewer connect
-- [ ] B4: Live output streaming (host → relay → viewer)
+- [x] B2: PTY wrapping — `getsloth <command>` works standalone
+- [x] B3: Relay server skeleton — sessions, host + viewer connect
+- [x] B4: Live output streaming (host → relay → viewer)
 
-**Checkpoint:** backend can stream, no auth/control yet.
+**Checkpoint:** backend can stream, no auth/control yet. ✅ Verified
+end-to-end with real binaries (not just unit tests) — measured ~1-2ms
+output latency, well under the 300ms target.
 
-- [ ] B5: Password auth — local verification + rate limiting
-- [ ] B6: Control handoff — single active writer + host override
-- [ ] B7: Kill switch
-- [ ] B8: Session teardown + reconnect resilience
+- [x] B5: Password auth — local verification + rate limiting
+- [x] B6: Control handoff — single active writer + host override
+- [x] B7: Kill switch
+- [x] B8: Session teardown + reconnect resilience
 
-**Checkpoint:** Backend feature-complete.
+**Checkpoint:** Backend feature-complete. ✅ B1-B8 all done, 91.7%
+coverage on internal/relay, real end-to-end tests (not just unit tests)
+for the crypto auth flow, control handoff, and kill switch. Open items:
+confirm module path before going public, manual interactive-terminal
+check still needed, signal-based host triggers (kill switch/reclaim)
+aren't discoverable in-session yet.
 
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
 - [x] F1: Project scaffold + tooling wired to CONSTRAINTS.md
@@ -49,7 +56,17 @@ token format). Phase 1 can start.
 
 **Checkpoint:** v0 works end-to-end on real devices, founder sign-off.
 
-## Phase 3: Launch Prep
+## Phase 3: UI/Design Pass
+Added after Phase 2 was scoped — explicitly sequenced to start only
+once Phase 2's checkpoint passes (founder's call: correctness first,
+design second). Not a redesign of behavior, a visual/brand design pass
+on top of the already-working, already-integrated Frontend.
+- [ ] D1: Visual design pass on the web viewer
+
+**Checkpoint:** Design pass complete — founder sign-off, F1-F8 tests
+still green.
+
+## Phase 4: Launch Prep
 - [ ] L1: LICENSE file (AGPL-3.0)
 - [ ] L2: README
 - [ ] L3: Deploy — Frontend to Vercel, relay to founder-provided server (bare-bones)

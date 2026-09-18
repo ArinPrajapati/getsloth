@@ -5,6 +5,7 @@ import type { ConnectionState, RelayClientOptions } from './ws-client';
 
 class FakeTerminal implements TerminalLike {
   readonly writes: Uint8Array[] = [];
+  private dataHandler: ((data: string) => void) | null = null;
 
   open(): void {
     return undefined;
@@ -12,6 +13,14 @@ class FakeTerminal implements TerminalLike {
 
   write(data: Uint8Array): void {
     this.writes.push(data);
+  }
+
+  onData(handler: (data: string) => void): void {
+    this.dataHandler = handler;
+  }
+
+  type(data: string): void {
+    this.dataHandler?.(data);
   }
 }
 
@@ -45,11 +54,12 @@ describe('mountViewerApp', () => {
       sendTakeControl: takeControl
     };
     const capturedOptions: Parameters<ViewerClientFactory>[0][] = [];
+    const terminal = new FakeTerminal();
 
     mountViewerApp(root, {
       pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
       relayBaseUrl: 'wss://relay.getsloth.dev',
-      createTerminal: () => new FakeTerminal(),
+      createTerminal: () => terminal,
       createClient: (options) => {
         capturedOptions.push(options);
         return client;
@@ -86,9 +96,11 @@ describe('mountViewerApp', () => {
     root.querySelector<HTMLButtonElement>('[aria-label="Session control"] button')?.click();
     expect(takeControl).toHaveBeenCalledTimes(1);
 
-    // Not the active writer right now (host-1 is) — quick actions must not
-    // send, since the relay would silently drop the input anyway.
+    // Not the active writer right now (host-1 is) — quick actions and typed
+    // keystrokes must not send, since the relay would silently drop the
+    // input anyway.
     root.querySelector<HTMLButtonElement>('[aria-label="Quick actions"] [data-action="yes"]')?.click();
+    terminal.type('y');
     expect(sentInput).toEqual([]);
 
     const chatInput = root.querySelector<HTMLInputElement>('#chat-message');
@@ -105,10 +117,11 @@ describe('mountViewerApp', () => {
     expect(sentChat).toEqual(['check auth middleware']);
     expect(root.querySelector('[aria-label="Chat messages"]')?.textContent).toContain('check auth middleware');
 
-    // Regain control, then quick actions should send again.
+    // Regain control, then quick actions and typed keystrokes should send again.
     capturedOptions[0]?.onControlChanged?.({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' });
     root.querySelector<HTMLButtonElement>('[aria-label="Quick actions"] [data-action="yes"]')?.click();
-    expect(sentInput).toEqual([[121, 13]]);
+    terminal.type('y');
+    expect(sentInput).toEqual([[121, 13], [121]]);
   });
 
   it('shows auth failures without revealing the terminal', () => {

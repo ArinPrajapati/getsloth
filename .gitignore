@@ -8,6 +8,14 @@ web/node_modules/
 web/dist/
 web/coverage/
 
-# Local git worktrees
+# Local-machine-only env overrides (e.g. VITE_RELAY_BASE_URL for
+# pointing a dev server at a local relay instead of production)
+web/.env.local
+web/.env.*.local
+
+# Git worktrees (per-agent isolated working directories)
 .worktrees/
 worktree/
+
+# Playwright MCP tool artifacts (page snapshot cache)
+.playwright-mcp/

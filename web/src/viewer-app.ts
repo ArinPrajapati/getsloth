@@ -39,7 +39,11 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   }
 
   terminalCard.hidden = true;
-  const terminal = createTerminalView(terminalElement, options.createTerminal);
+  const terminal = createTerminalView(terminalElement, options.createTerminal, {
+    onInput: (bytes) => {
+      client.sendInput(bytes);
+    }
+  });
   const websocketUrl = viewerWebSocketUrl(options.pageUrl, options.relayBaseUrl);
   const hostPublicKeyBase64Url = hostPublicKeyFromFragment(options.pageUrl);
 
@@ -115,7 +119,9 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     },
     onControlChanged: (control) => {
       controlPanel.updateControl(control);
-      quickActions.setActive(control.active_writer_id === localConnectionId);
+      const isActiveWriter = control.active_writer_id === localConnectionId;
+      quickActions.setActive(isActiveWriter);
+      terminal.setActive(isActiveWriter);
     },
     onPresence: (presence) => {
       controlPanel.updatePresence(presence.connections);

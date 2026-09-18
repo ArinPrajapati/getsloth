@@ -5,16 +5,23 @@ set -euo pipefail
 
 export PATH="$(go env GOPATH)/bin:$PATH"
 
-unformatted="$(gofmt -l .)"
+# Scoped to the actual Go source directories, not a bare "./..." or ".":
+# web/node_modules (npm dependencies, gitignored but present after `npm
+# install`) can contain stray .go files shipped by some packages (e.g.
+# flatted's bundled Go port) that Go's tooling would otherwise pick up,
+# since Go doesn't skip node_modules the way JS tooling does.
+GO_DIRS="./cmd/... ./internal/..."
+
+unformatted="$(gofmt -l cmd internal)"
 if [ -n "$unformatted" ]; then
   echo "gofmt: unformatted files:" >&2
   echo "$unformatted" >&2
   exit 1
 fi
 
-go vet ./...
-staticcheck ./...
-golangci-lint run
+go vet $GO_DIRS
+staticcheck $GO_DIRS
+golangci-lint run ./cmd/... ./internal/...
 gitleaks detect --redact --no-banner --source .
 
 echo "check.sh: all fast checks passed"
