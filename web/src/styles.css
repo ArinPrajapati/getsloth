@@ -510,10 +510,6 @@ textarea {
 
 .landing-shot {
   margin: 0;
-  border: 1px solid #2a2620;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  background: #17130f;
 }
 
 .landing-shot img {
@@ -523,7 +519,139 @@ textarea {
 }
 
 .landing-shot-mobile {
-  max-width: 320px;
+  max-width: 240px;
+  justify-self: center;
+}
+
+.device-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* MacBook: a screen bezel sitting on a wider flat deck, the classic
+   front-on laptop silhouette - no external mockup image needed. */
+.device-frame-mac-screen {
+  position: relative;
+  width: 100%;
+  border: 14px solid #2b2721;
+  border-bottom: 0;
+  border-radius: 1rem 1rem 0 0;
+  overflow: hidden;
+  background: #17130f;
+  box-shadow: 0 20px 45px -20px rgba(0, 0, 0, 0.6);
+}
+
+.device-frame-mac-camera {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #0d0b09;
+  box-shadow: 0 0 0 1px #3a352c;
+  z-index: 1;
+}
+
+.device-frame-mac-base {
+  width: 112%;
+  height: 1rem;
+  background: linear-gradient(#3a352c, #211d18);
+  border-radius: 0 0 0.75rem 0.75rem;
+  position: relative;
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.6);
+}
+
+.device-frame-mac-base::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4rem;
+  height: 0.3125rem;
+  background: #0d0b09;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+/* iPhone: thick metal bezel, physical side buttons, and a dynamic
+   island - proportioned narrow so it reads as a device, not a card.
+   Buttons sit inside the bezel band (not offset outside the box) so
+   they're never clipped by an ancestor's overflow or a tight crop. */
+.device-frame-phone {
+  position: relative;
+  width: 100%;
+  padding: 0.875rem 0.75rem;
+  border-radius: 2.75rem;
+  background: linear-gradient(165deg, #4a4438, #17130f 55%);
+  box-shadow:
+    inset 0 0 0 1px #55503f,
+    0 20px 45px -18px rgba(0, 0, 0, 0.65);
+}
+
+.device-frame-phone-screen {
+  position: relative;
+  border-radius: 2rem;
+  overflow: hidden;
+  background: #000;
+  box-shadow: inset 0 0 0 1px #000;
+}
+
+.device-frame-phone img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.device-frame-phone-island {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34%;
+  height: 1.125rem;
+  background: #000;
+  border-radius: 999px;
+  z-index: 1;
+  box-shadow: 0 0 0 1px #2a2620;
+}
+
+.device-frame-phone-button {
+  position: absolute;
+  background: linear-gradient(90deg, #17130f, #55503f);
+  border-radius: 2px;
+}
+
+.device-frame-phone-mute,
+.device-frame-phone-volume-up,
+.device-frame-phone-volume-down {
+  left: 0;
+  width: 3px;
+}
+
+.device-frame-phone-mute {
+  top: 16%;
+  height: 4%;
+}
+
+.device-frame-phone-volume-up {
+  top: 24%;
+  height: 8%;
+}
+
+.device-frame-phone-volume-down {
+  top: 34%;
+  height: 8%;
+}
+
+.device-frame-phone-power {
+  right: 0;
+  top: 24%;
+  width: 3px;
+  height: 10%;
+  background: linear-gradient(270deg, #17130f, #55503f);
 }
 
 .landing-how h2 {

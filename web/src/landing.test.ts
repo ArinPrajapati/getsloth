@@ -8,7 +8,7 @@ describe('mountLandingPage', () => {
 
     expect(root.querySelector('h1')?.textContent).toBe('Sloth');
     expect(root.textContent).toContain('Control an AI coding agent session from your phone.');
-    expect(root.querySelector('.landing-install')?.textContent).toContain('go install');
+    expect(root.querySelector('.landing-install')?.textContent).toContain('install.sh');
     expect(root.querySelectorAll('a[href="https://github.com/arinprajapati/getsloth"]').length).toBeGreaterThan(0);
     expect(root.querySelectorAll('img').length).toBe(2);
     expect(root.textContent.toLowerCase()).not.toContain('pricing');

@@ -13,14 +13,14 @@ export function mountLandingPage(root: HTMLElement): void {
     <h1>Sloth</h1>
     <p class="landing-tagline">Control an AI coding agent session from your phone.</p>
     <p class="landing-lede">
-      Wrap any terminal command in a PTY and stream it to a password-gated
-      browser tab. Start a long-running agent session on your laptop, walk
-      away, and keep watching or steering it from your phone &mdash; no SSH
-      keys, no app install, nothing to configure on the viewing device.
+      Start an AI coding agent on your laptop, walk away, and keep
+      watching or steering it from your phone &mdash; no SSH keys, no
+      app install, nothing to configure on the viewing device. Works
+      with any agent, or any terminal command at all.
     </p>
     <div class="landing-cta">
       <a class="landing-button primary" href="https://github.com/arinprajapati/getsloth">Get the code</a>
-      <code class="landing-install">go install github.com/arinprajapati/getsloth/cmd/getsloth@latest</code>
+      <code class="landing-install">curl -fsSL https://getsloth.dev/install.sh | sh</code>
     </div>
   `;
 
@@ -28,10 +28,25 @@ export function mountLandingPage(root: HTMLElement): void {
   shots.className = 'landing-shots';
   shots.innerHTML = `
     <figure class="landing-shot landing-shot-desktop">
-      <img src="/screenshots/desktop-busy.png" alt="Sloth viewer showing a live agent session on desktop" loading="lazy" />
+      <div class="device-frame device-frame-mac">
+        <div class="device-frame-mac-screen">
+          <span class="device-frame-mac-camera"></span>
+          <img src="/screenshots/desktop-busy.png" alt="Sloth viewer showing a live agent session on desktop" loading="lazy" />
+        </div>
+        <div class="device-frame-mac-base"></div>
+      </div>
     </figure>
     <figure class="landing-shot landing-shot-mobile">
-      <img src="/screenshots/mobile-busy.png" alt="Sloth viewer showing a live agent session on a phone" loading="lazy" />
+      <div class="device-frame device-frame-phone">
+        <span class="device-frame-phone-button device-frame-phone-mute"></span>
+        <span class="device-frame-phone-button device-frame-phone-volume-up"></span>
+        <span class="device-frame-phone-button device-frame-phone-volume-down"></span>
+        <span class="device-frame-phone-button device-frame-phone-power"></span>
+        <div class="device-frame-phone-screen">
+          <div class="device-frame-phone-island"></div>
+          <img src="/screenshots/mobile-busy.png" alt="Sloth viewer showing a live agent session on a phone" loading="lazy" />
+        </div>
+      </div>
     </figure>
   `;
 
