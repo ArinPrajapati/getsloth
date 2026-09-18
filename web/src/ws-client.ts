@@ -13,6 +13,13 @@ import {
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected';
 
+// docs/protocol.md Reconnect: a viewer that briefly loses network sends
+// resume{token} instead of auth{...} - the relay-issued token is valid
+// for RECONNECT_WINDOW_MS after a drop. Backoff is a fixed short delay
+// rather than exponential since the window itself is the real bound.
+const RECONNECT_WINDOW_MS = 30000;
+const RECONNECT_BACKOFF_MS = 1000;
+
 export interface SocketLike {
   onopen: ((event: Event) => void) | null;
   onclose: ((event: CloseEvent) => void) | null;
@@ -49,6 +56,10 @@ export class RelayClient {
   private readonly onStateChange: (state: ConnectionState) => void;
   private readonly url: string;
   private socket: SocketLike | null = null;
+  private token: string | null = null;
+  private intentionalClose = false;
+  private reconnectDeadline: number | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: RelayClientOptions) {
     this.url = options.url;
@@ -83,17 +94,27 @@ export class RelayClient {
   }
 
   connect(): void {
+    this.intentionalClose = false;
+    this.openSocket(false);
+  }
+
+  private openSocket(isResume: boolean): void {
     this.onStateChange('connecting');
 
     const socket = this.createSocket(this.url);
     this.socket = socket;
 
     socket.onopen = () => {
+      if (isResume && this.token) {
+        socket.send(JSON.stringify({ v: 1, type: 'resume', token: this.token }));
+      }
+
       this.onStateChange('connected');
     };
 
     socket.onclose = () => {
       this.onStateChange('disconnected');
+      this.scheduleReconnect();
     };
 
     socket.onerror = () => {
@@ -113,6 +134,11 @@ export class RelayClient {
       }
 
       if (message.type === 'auth_result') {
+        if (message.ok && message.token) {
+          this.token = message.token;
+          this.reconnectDeadline = null;
+        }
+
         this.onAuthResult(message);
         return;
       }
@@ -163,7 +189,35 @@ export class RelayClient {
   }
 
   disconnect(): void {
+    this.intentionalClose = true;
+
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     this.socket?.close();
     this.socket = null;
+  }
+
+  private scheduleReconnect(): void {
+    if (this.intentionalClose || !this.token) {
+      return;
+    }
+
+    const now = Date.now();
+
+    if (this.reconnectDeadline === null) {
+      this.reconnectDeadline = now + RECONNECT_WINDOW_MS;
+    }
+
+    if (now >= this.reconnectDeadline) {
+      return;
+    }
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket(true);
+    }, RECONNECT_BACKOFF_MS);
   }
 }

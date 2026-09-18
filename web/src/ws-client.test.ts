@@ -182,6 +182,100 @@ describe('RelayClient', () => {
     expect(states).toEqual(['connecting', 'disconnected']);
   });
 
+  it('automatically resumes with the stored token after an unexpected disconnect', () => {
+    vi.useFakeTimers();
+
+    try {
+      const states: ConnectionState[] = [];
+      const client = new RelayClient({
+        url: 'ws://relay.test/ws/viewer/session',
+        createSocket: (url) => new FakeSocket(url),
+        onStateChange: (state) => states.push(state),
+        onOutput: () => undefined,
+        onErrorMessage: () => undefined
+      });
+
+      client.connect();
+      FakeSocket.created[0]?.onopen?.(new Event('open'));
+      FakeSocket.created[0]?.emit(
+        JSON.stringify({ v: 1, type: 'auth_result', ok: true, token: 'resume-token', connection_id: 'viewer-1' })
+      );
+
+      // Unexpected drop (network blip), not an explicit disconnect().
+      FakeSocket.created[0]?.onclose?.(new CloseEvent('close'));
+      vi.advanceTimersByTime(1000);
+
+      expect(FakeSocket.created).toHaveLength(2);
+      FakeSocket.created[1]?.onopen?.(new Event('open'));
+
+      expect(FakeSocket.created[1]?.sent).toEqual([JSON.stringify({ v: 1, type: 'resume', token: 'resume-token' })]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not attempt to reconnect after an explicit disconnect', () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new RelayClient({
+        url: 'ws://relay.test/ws/viewer/session',
+        createSocket: (url) => new FakeSocket(url),
+        onStateChange: () => undefined,
+        onOutput: () => undefined,
+        onErrorMessage: () => undefined
+      });
+
+      client.connect();
+      FakeSocket.created[0]?.onopen?.(new Event('open'));
+      FakeSocket.created[0]?.emit(
+        JSON.stringify({ v: 1, type: 'auth_result', ok: true, token: 'resume-token', connection_id: 'viewer-1' })
+      );
+
+      client.disconnect();
+      vi.advanceTimersByTime(30000);
+
+      expect(FakeSocket.created).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops retrying once the reconnect window elapses without a successful resume', () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new RelayClient({
+        url: 'ws://relay.test/ws/viewer/session',
+        createSocket: (url) => new FakeSocket(url),
+        onStateChange: () => undefined,
+        onOutput: () => undefined,
+        onErrorMessage: () => undefined
+      });
+
+      client.connect();
+      FakeSocket.created[0]?.onopen?.(new Event('open'));
+      FakeSocket.created[0]?.emit(
+        JSON.stringify({ v: 1, type: 'auth_result', ok: true, token: 'resume-token', connection_id: 'viewer-1' })
+      );
+
+      // Every reconnect attempt fails immediately (e.g. relay unreachable) -
+      // advance well past the 30s reconnect window.
+      for (let elapsed = 0; elapsed < 35000; elapsed += 1000) {
+        const latest = FakeSocket.created.at(-1);
+        latest?.onclose?.(new CloseEvent('close'));
+        vi.advanceTimersByTime(1000);
+      }
+
+      const countAtWindowEnd = FakeSocket.created.length;
+      vi.advanceTimersByTime(5000);
+
+      expect(FakeSocket.created).toHaveLength(countAtWindowEnd);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reports kicked separately from session_ended', () => {
     const kicked: string[] = [];
     const ended: string[] = [];
