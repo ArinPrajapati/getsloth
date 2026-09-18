@@ -6,8 +6,8 @@ import (
 	"io"
 	"net"
 	"os"
-	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
 
@@ -80,49 +80,33 @@ func hostControlKeyAction(key byte) string {
 }
 
 func watchHostControlConsole(socketPath string, out io.Writer) int {
-	keypresses := make(chan byte, 1)
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-		if err == nil {
-			defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
-			go readHostControlKeys(os.Stdin, keypresses)
-		}
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "getsloth control: connect to host session: %v\n", err)
+		return 1
 	}
-
-	for {
-		_, _ = fmt.Fprint(out, "\x1b[H\x1b[2J")
-		if code := runHostControlConsole([]string{"--socket", socketPath}, out); code != 0 {
-			return code
-		}
-
-		select {
-		case key := <-keypresses:
-			action := hostControlKeyAction(key)
-			if action == "quit" {
-				return 0
-			}
-			if action == "reclaim" || action == "kill" {
-				_ = runHostControlConsole([]string{"--socket", socketPath, "--action", action}, io.Discard)
-			}
-		case <-time.After(time.Second):
-		}
+	defer func() { _ = conn.Close() }()
+	if err := json.NewEncoder(conn).Encode(hostControlRequest{Action: "snapshot"}); err != nil {
+		_, _ = fmt.Fprintf(out, "getsloth control: request host status: %v\n", err)
+		return 1
 	}
-}
-
-func readHostControlKeys(input *os.File, keypresses chan<- byte) {
-	buffer := make([]byte, 64)
-	for {
-		count, err := input.Read(buffer)
+	var response hostControlResponse
+	if err := json.NewDecoder(conn).Decode(&response); err != nil || response.Error != "" || response.Snapshot == nil {
 		if err != nil {
-			return
+			_, _ = fmt.Fprintf(out, "getsloth control: read host status: %v\n", err)
+		} else if response.Error != "" {
+			_, _ = fmt.Fprintf(out, "getsloth control: %s\n", response.Error)
+		} else {
+			_, _ = fmt.Fprintln(out, "getsloth control: host returned no session status")
 		}
-		for _, key := range buffer[:count] {
-			select {
-			case keypresses <- key:
-			default:
-			}
-		}
+		return 1
 	}
+	program := tea.NewProgram(newHostControlTUI(socketPath, *response.Snapshot), tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(out))
+	if _, err := program.Run(); err != nil {
+		_, _ = fmt.Fprintf(out, "getsloth control: run terminal UI: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {

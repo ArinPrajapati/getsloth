@@ -76,6 +76,12 @@ func renderHostControlDashboard(snapshot hostControlSnapshot, width int) string 
 		eventLines = append(eventLines, truncateDashboardText("• "+event, contentWidth-4))
 	}
 
+	if contentWidth < 100 {
+		viewers := controlPanel.Width(contentWidth - 2).Render(strings.Join(viewerLines, "\n"))
+		events := controlPanel.Width(contentWidth - 2).Render(strings.Join(eventLines, "\n"))
+		return strings.Join([]string{header, "", summary, "", viewers, events}, "\n")
+	}
+
 	panelWidth := contentWidth / 2
 	viewers := controlPanel.Width(panelWidth - 2).Render(strings.Join(viewerLines, "\n"))
 	events := controlPanel.Width(contentWidth - panelWidth - 2).Render(strings.Join(eventLines, "\n"))

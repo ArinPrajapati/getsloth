@@ -5,8 +5,20 @@ import (
 	"testing"
 
 	"github.com/arinprajapati/getsloth/internal/protocol"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+func TestHostControlTUI_UsesWindowWidthForResponsiveDashboard(t *testing.T) {
+	model := newHostControlTUI("/tmp/getsloth.sock", hostControlSnapshot{Live: true})
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 72, Height: 30})
+	view := updated.(hostControlTUI).View()
+	for _, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got > 72 {
+			t.Errorf("line width = %d, want <= 72: %q", got, line)
+		}
+	}
+}
 
 func TestRenderHostControlDashboard_ContainsLongInviteWithinTerminalWidth(t *testing.T) {
 	snapshot := hostControlSnapshot{
