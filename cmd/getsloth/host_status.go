@@ -112,6 +112,16 @@ func (s *hostSessionStatus) updateControl(msg protocol.ControlChangedMsg) {
 	s.mu.Unlock()
 }
 
+// noteKillSwitch records that the host triggered the kill switch, so the
+// control console's activity log reflects it instead of the event only
+// ever reaching the host's stderr.
+func (s *hostSessionStatus) noteKillSwitch() {
+	s.mu.Lock()
+	s.appendEventLocked("Host triggered kill switch - viewers disconnected")
+	s.renderTitleLocked()
+	s.mu.Unlock()
+}
+
 func (s *hostSessionStatus) setDisconnected() {
 	s.mu.Lock()
 	s.live = false

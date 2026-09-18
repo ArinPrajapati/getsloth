@@ -119,6 +119,7 @@ func main() {
 			err := ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
 			if err == nil {
 				fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+				status.noteKillSwitch()
 			}
 			return err
 		}

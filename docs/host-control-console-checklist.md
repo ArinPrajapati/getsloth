@@ -63,29 +63,26 @@ Password    9UGRUL7Xnb
 
 ## Main session behavior
 
-- [ ] Keep the shared PTY clean: no persistent status bar inside it.
-- [ ] Remove or replace stale one-time live status snapshots.
-- [ ] Startup output should say the control console opened.
-- [ ] Keep lightweight escape shortcuts in the main session:
-  - [ ] `Ctrl-] r` reclaim control.
-  - [ ] `Ctrl-] i` print current live status.
-- [ ] If the control console fails to open, print a clear fallback message:
-  - [ ] control console unavailable.
-  - [ ] use `Ctrl-] i` for status.
-  - [ ] use `Ctrl-] r` to reclaim.
+- [x] Keep the shared PTY clean: no persistent status bar inside it.
+- [x] Remove or replace stale one-time live status snapshots.
+- [x] Startup output should say the control console opened (`main.go`: "host control console opened in a separate Terminal window").
+- [x] Keep lightweight escape shortcuts in the main session:
+  - [x] `Ctrl-] r` reclaim control.
+  - [x] `Ctrl-] i` print current live status.
+- [x] If the control console fails to open, print a clear fallback message naming both `Ctrl-] i` and `Ctrl-] r`.
 
 ## Live status data
 
-- [ ] Session state: live/offline/ending.
-- [ ] Session mode: Remote or Group.
-- [ ] Public URL.
-- [ ] Password.
-- [ ] Viewer count.
-- [ ] Viewer list.
-- [ ] Active controller: host or viewer name/id.
-- [ ] Recent event log.
-- [ ] Kill-switch state/result.
-- [ ] Relay connection health.
+- [x] Session state: live/offline/ending.
+- [x] Session mode: Remote or Group.
+- [x] Public URL (hidden by default; reveal with `[i]`).
+- [x] Password (hidden by default; reveal with `[i]`).
+- [x] Viewer count (implicit in the viewer list length; no separate counter).
+- [x] Viewer list.
+- [x] Active controller: host or viewer name/id.
+- [x] Recent event log.
+- [x] Kill-switch state/result (now logged to the activity feed via `noteKillSwitch`, not just stderr).
+- [ ] Relay connection health — not implemented. There is no reconnect/RTT state on the host side to surface yet; needs its own design (see below), not a bolt-on.
 
 ## Viewer connection graph
 
@@ -172,8 +169,8 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 - [x] Add `getsloth control ...` command or equivalent internal console entrypoint.
 - [x] Render basic terminal UI.
 - [x] Show live session status, URL, password, viewers, and controller.
-- [ ] Show recent events.
-- [ ] Add keyboard commands.
+- [x] Show recent events.
+- [x] Add keyboard commands.
 
 ### Phase 4 — Auto-open separate terminal
 
@@ -183,10 +180,10 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 
 ### Phase 5 — Buttons, mouse, and graph polish
 
-- [ ] Add visible clickable buttons.
-- [ ] Add mouse event support.
-- [ ] Add per-viewer latency/health graph.
-- [ ] Add quality labels.
+- [x] Add visible clickable buttons.
+- [x] Add mouse event support.
+- [ ] Add per-viewer latency/health graph — blocked on relay/protocol RTT plumbing that doesn't exist yet (no ping/pong, no per-connection timing anywhere in `internal/relay` or `internal/protocol`). Faking numbers here would misrepresent real network state; scope as its own task.
+- [ ] Add quality labels — same blocker as above.
 
 ## Open questions
 

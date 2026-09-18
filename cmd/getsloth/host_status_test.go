@@ -99,6 +99,18 @@ func TestHostSessionStatus_RecordsControlChangesAsEvents(t *testing.T) {
 	}
 }
 
+func TestHostSessionStatus_NoteKillSwitchRecordsEvent(t *testing.T) {
+	var out bytes.Buffer
+	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
+
+	status.noteKillSwitch()
+
+	events := status.snapshot().Events
+	if len(events) == 0 || !strings.Contains(events[0], "kill switch") {
+		t.Errorf("events = %#v, want a kill switch event", events)
+	}
+}
+
 func TestHostSessionStatus_PrintWritesReadableStatus(t *testing.T) {
 	var out bytes.Buffer
 	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
