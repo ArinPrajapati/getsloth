@@ -26,3 +26,6 @@ deploy/server-notes.md
 
 # Local Cloudflare tunnel configs for phone/manual dev testing.
 .cloudflared/
+
+# macOS Finder metadata.
+.DS_Store
