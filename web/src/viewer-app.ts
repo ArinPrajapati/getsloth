@@ -89,8 +89,8 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
         displayName: submission.displayName
       }).then((message) => {
         client.sendAuth(message);
-      }).catch(() => {
-        gate.showError('Could not encrypt password attempt');
+      }).catch((error: unknown) => {
+        gate.showError(error instanceof Error ? error.message : 'Could not encrypt password attempt');
       });
     }
   });

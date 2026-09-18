@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  server: {
+    // Needed for real-phone dev testing through Cloudflare quick tunnels.
+    // Production hosting is separate; this only affects Vite dev server.
+    allowedHosts: ['.trycloudflare.com']
+  },
   test: {
     environment: 'jsdom',
     globals: true,
