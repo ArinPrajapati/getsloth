@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -127,49 +126,11 @@ func readHostControlKeys(input *os.File, keypresses chan<- byte) {
 }
 
 func renderHostControlSnapshot(out io.Writer, snapshot hostControlSnapshot) {
-	live := "OFFLINE"
-	if snapshot.Live {
-		live = "LIVE"
-	}
-
-	controller := "host controls"
-	if snapshot.ControllerRole == "viewer" {
-		controller = "viewer controls"
-		for _, viewer := range snapshot.Viewers {
-			if viewer.ID == snapshot.ControllerID {
-				controller = viewer.Name + " controls"
-				break
-			}
+	width := 80
+	if terminal, ok := out.(*os.File); ok {
+		if cols, _, err := term.GetSize(int(terminal.Fd())); err == nil && cols > 0 {
+			width = cols
 		}
 	}
-
-	viewerCount := len(snapshot.Viewers)
-
-	_, _ = fmt.Fprintln(out, "┌──────────────────────────────────────────────────────────────┐")
-	_, _ = fmt.Fprintln(out, "│ [r] RECLAIM  [k] KILL VIEWERS  [i] INVITE  [q] QUIT          │")
-	_, _ = fmt.Fprintln(out, "└──────────────────────────────────────────────────────────────┘")
-	_, _ = fmt.Fprintln(out, "GETSLOTH CONTROL")
-	_, _ = fmt.Fprintf(out, "Session     %s\n", live)
-	_, _ = fmt.Fprintf(out, "Mode        %s\n", modeLabel(snapshot.Mode))
-	_, _ = fmt.Fprintf(out, "Viewers     %d connected\n", viewerCount)
-	_, _ = fmt.Fprintf(out, "Controller  %s\n", controller)
-	if snapshot.InviteURL != "" {
-		_, _ = fmt.Fprintf(out, "URL         %s\n", snapshot.InviteURL)
-	}
-	if snapshot.Password != "" {
-		_, _ = fmt.Fprintf(out, "Password    %s\n", snapshot.Password)
-	}
-	if viewerCount > 0 {
-		names := make([]string, 0, viewerCount)
-		for _, viewer := range snapshot.Viewers {
-			names = append(names, viewer.Name)
-		}
-		_, _ = fmt.Fprintf(out, "Connected   %s\n", strings.Join(names, ", "))
-	}
-	if len(snapshot.Events) > 0 {
-		_, _ = fmt.Fprintln(out, "\nEvents")
-		for _, event := range snapshot.Events {
-			_, _ = fmt.Fprintf(out, "  • %s\n", event)
-		}
-	}
+	_, _ = fmt.Fprintln(out, renderHostControlDashboard(snapshot, width))
 }
