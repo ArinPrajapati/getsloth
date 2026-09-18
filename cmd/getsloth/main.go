@@ -12,6 +12,11 @@ import (
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
+// version is set at build time via -ldflags "-X main.version=...";
+// goreleaser sets it from the release tag. "dev" covers `go run`/`go
+// install` builds that skip that step.
+var version = "dev"
+
 const usageText = `Usage:
   getsloth [--remote] [command [args...]]
   getsloth --group [command [args...]]
@@ -29,6 +34,10 @@ func main() {
 		if _, err := io.WriteString(os.Stdout, usageText); err != nil {
 			os.Exit(1)
 		}
+		return
+	}
+	if wantsVersion(os.Args) {
+		_, _ = fmt.Fprintf(os.Stdout, "getsloth %s\n", version)
 		return
 	}
 
@@ -211,6 +220,10 @@ func hostControlCommandArgs(args []string) ([]string, bool) {
 
 func wantsHelp(args []string) bool {
 	return len(args) == 2 && (args[1] == "--help" || args[1] == "-h")
+}
+
+func wantsVersion(args []string) bool {
+	return len(args) == 2 && (args[1] == "--version" || args[1] == "-v")
 }
 
 func commandFromArgs(args []string) []string {

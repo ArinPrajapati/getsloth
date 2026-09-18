@@ -39,6 +39,15 @@ func TestWantsHelpOnlyBeforeTheWrappedCommand(t *testing.T) {
 	}
 }
 
+func TestWantsVersionOnlyBeforeTheWrappedCommand(t *testing.T) {
+	if !wantsVersion([]string{"getsloth", "--version"}) || !wantsVersion([]string{"getsloth", "-v"}) {
+		t.Fatal("top-level version flags were not recognized")
+	}
+	if wantsVersion([]string{"getsloth", "claude", "--version"}) {
+		t.Fatal("a wrapped command's --version flag must remain command input")
+	}
+}
+
 func TestCommandFromArgs_UsesExplicitCommand(t *testing.T) {
 	got := commandFromArgs([]string{"getsloth", "nvim", "README.md"})
 	want := []string{"nvim", "README.md"}

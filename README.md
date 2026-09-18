@@ -15,11 +15,20 @@ case, not the primary one.
 ## Install
 
 ```
+curl -fsSL https://getsloth.dev/install.sh | sh
+```
+
+No Go toolchain required — this downloads a prebuilt binary for your
+OS/arch from [GitHub Releases](https://github.com/arinprajapati/getsloth/releases).
+
+If you already have Go:
+
+```
 go install github.com/arinprajapati/getsloth/cmd/getsloth@latest
 ```
 
-Requires Go 1.27+. This installs as `getsloth` for now; the examples
-below use `sloth` — alias it if you'd rather type the short name:
+Either way it installs as `getsloth` for now; the examples below use
+`sloth` — alias it if you'd rather type the short name:
 
 ```
 alias sloth=getsloth
