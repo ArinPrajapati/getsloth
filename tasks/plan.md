@@ -500,18 +500,21 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
 ### Phase 2: Integration (joint — after both checkpoints pass)
 
-- [ ] **Task I1: Wire Frontend against real Backend end-to-end**
+- [x] **Task I1: Wire Frontend against real Backend end-to-end**
 
   **Description:** Replace the Frontend's mock relay stub with the real
   relay, fix any protocol mismatches discovered (T0 is a contract, not a
   guarantee both sides interpreted it identically).
 
   **Acceptance criteria:**
-  - [ ] Every Functional Requirement (spec, FR 1–12) works end-to-end
+  - [x] Every Functional Requirement (spec, FR 1–12) works end-to-end
         against the real Backend + Frontend together
 
   **Verification:**
-  - [ ] Manual check: full walkthrough of all 12 functional requirements
+  - [x] Manual check: full walkthrough of all 12 functional requirements
+        (see agent-session log for the specific gaps found and fixed:
+        presence/chat/env-var wiring, terminal keystroke passthrough +
+        byte-limit truncation, frontend reconnect via resume token)
 
   **Dependencies:** Backend checkpoint, Frontend checkpoint
 
