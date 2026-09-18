@@ -26,6 +26,58 @@ describe('parseRelayMessage', () => {
     expect(parseRelayMessage(JSON.stringify({ v: 1, type: 'error', code: 'NOPE', message: 'bad' }))).toBeNull();
   });
 
+  it('accepts the complete session state on a successful auth result', () => {
+    const message = parseRelayMessage(JSON.stringify({
+      v: 1,
+      type: 'auth_result',
+      ok: true,
+      token: 'token',
+      connection_id: 'viewer-1',
+      mode: 'remote',
+      cols: 120,
+      rows: 36,
+      active_writer_id: 'host-1',
+      active_writer_role: 'host'
+    }));
+
+    expect(message).toEqual({
+      v: 1,
+      type: 'auth_result',
+      ok: true,
+      token: 'token',
+      connection_id: 'viewer-1',
+      mode: 'remote',
+      cols: 120,
+      rows: 36,
+      active_writer_id: 'host-1',
+      active_writer_role: 'host'
+    });
+  });
+
+  it('accepts occupied auth failures and read-only session errors', () => {
+    expect(parseRelayMessage(JSON.stringify({ v: 1, type: 'auth_result', ok: false, code: 'SESSION_OCCUPIED' }))).toEqual({
+      v: 1,
+      type: 'auth_result',
+      ok: false,
+      code: 'SESSION_OCCUPIED'
+    });
+    expect(parseRelayMessage(JSON.stringify({ v: 1, type: 'error', code: 'READ_ONLY_SESSION', message: 'Read only' }))).toEqual({
+      v: 1,
+      type: 'error',
+      code: 'READ_ONLY_SESSION',
+      message: 'Read only'
+    });
+  });
+
+  it('accepts canonical terminal size broadcasts', () => {
+    expect(parseRelayMessage(JSON.stringify({ v: 1, type: 'terminal_size', cols: 160, rows: 44 }))).toEqual({
+      v: 1,
+      type: 'terminal_size',
+      cols: 160,
+      rows: 44
+    });
+  });
+
   it('accepts kicked messages', () => {
     const message = parseRelayMessage(JSON.stringify({ v: 1, type: 'kicked', reason: 'kill_switch' }));
 

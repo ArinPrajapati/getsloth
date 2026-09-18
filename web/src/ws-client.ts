@@ -8,7 +8,8 @@ import {
   type ControlChangedMsg,
   type KickedMsg,
   type PresenceMsg,
-  type SessionEndedMsg
+  type SessionEndedMsg,
+  type TerminalSizeMsg
 } from './protocol';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected';
@@ -41,6 +42,7 @@ export interface RelayClientOptions {
   onPresence?(presence: PresenceMsg): void;
   onKicked?(message: KickedMsg): void;
   onSessionEnded?(message: SessionEndedMsg): void;
+  onTerminalSize?(message: TerminalSizeMsg): void;
 }
 
 export class RelayClient {
@@ -53,6 +55,7 @@ export class RelayClient {
   private readonly onOutput: (bytes: Uint8Array) => void;
   private readonly onPresence: (presence: PresenceMsg) => void;
   private readonly onSessionEnded: (message: SessionEndedMsg) => void;
+  private readonly onTerminalSize: (message: TerminalSizeMsg) => void;
   private readonly onStateChange: (state: ConnectionState) => void;
   private readonly url: string;
   private socket: SocketLike | null = null;
@@ -81,6 +84,9 @@ export class RelayClient {
     };
     this.onSessionEnded = (message) => {
       options.onSessionEnded?.(message);
+    };
+    this.onTerminalSize = (message) => {
+      options.onTerminalSize?.(message);
     };
     this.onStateChange = (state) => {
       options.onStateChange(state);
@@ -168,6 +174,11 @@ export class RelayClient {
         return;
       }
 
+      if (message.type === 'terminal_size') {
+        this.onTerminalSize(message);
+        return;
+      }
+
       this.onErrorMessage(message.message);
     };
   }
@@ -184,8 +195,12 @@ export class RelayClient {
     this.socket?.send(JSON.stringify({ v: 1, type: 'input', data_base64: encodeBase64Bytes(bytes) }));
   }
 
-  sendTakeControl(): void {
-    this.socket?.send(JSON.stringify({ v: 1, type: 'take_control' }));
+  sendResize(cols: number, rows: number): void {
+    this.socket?.send(JSON.stringify({ v: 1, type: 'resize', cols, rows }));
+  }
+
+  sendTakeControl(cols: number, rows: number): void {
+    this.socket?.send(JSON.stringify({ v: 1, type: 'take_control', cols, rows }));
   }
 
   disconnect(): void {

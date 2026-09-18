@@ -95,6 +95,17 @@ func (s *Server) handleHostMessage(session *Session, raw []byte) {
 	}
 
 	switch env.Type {
+	case "session_config":
+		var msg protocol.SessionConfigMsg
+		if err := json.Unmarshal(raw, &msg); err != nil || !session.configure(msg.Mode, msg.HostCols, msg.HostRows) {
+			return
+		}
+	case "host_size":
+		var msg protocol.HostSizeMsg
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			return
+		}
+		s.handleHostSize(session, msg)
 	case "output":
 		var msg protocol.OutputMsg
 		if err := json.Unmarshal(raw, &msg); err != nil {
@@ -108,11 +119,15 @@ func (s *Server) handleHostMessage(session *Session, raw []byte) {
 		}
 		s.handleAuthResponse(session, msg)
 	case "take_control":
+		var msg protocol.TakeControlMsg
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			return
+		}
 		session.mu.Lock()
 		host := session.host
 		session.mu.Unlock()
 		if host != nil {
-			s.handleTakeControl(session, host)
+			s.handleTakeControl(session, host, msg)
 		}
 	case "kill_switch":
 		s.handleKillSwitch(session)
@@ -175,8 +190,5 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 		s.handleViewerMessage(session, conn, remoteAddr, raw)
 	}
 
-	session.removeViewer(conn.ID())
-	// A no-op broadcast if conn was never authenticated (it was already
-	// excluded from every presence view), harmless either way.
-	s.broadcastPresence(session)
+	s.handleViewerDisconnect(session, conn)
 }

@@ -14,6 +14,7 @@ func TestChat_ViewerMessage_ReachesHostAndOtherViewers(t *testing.T) {
 	var created protocol.SessionCreatedMsg
 	readMsg(t, host, &created)
 	hs := newHostStub(t, host, true)
+	configureSession(t, hs, protocol.SessionModeGroup, 120, 36)
 
 	viewer1 := authedViewer(t, base, created.SessionID, hs)
 	viewer2 := authedViewer(t, base, created.SessionID, hs)

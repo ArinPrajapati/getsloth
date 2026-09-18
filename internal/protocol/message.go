@@ -12,6 +12,13 @@ package protocol
 // v0. See docs/protocol.md's "Protocol version mismatch" section.
 const ProtocolVersion = 1
 
+const (
+	SessionModeRemote = "remote"
+	SessionModeGroup  = "group"
+	DefaultCols       = 80
+	DefaultRows       = 24
+)
+
 // Envelope is the header every protocol message shares.
 type Envelope struct {
 	V    int    `json:"v"`
@@ -28,6 +35,16 @@ type SessionCreatedMsg struct {
 	Envelope
 	SessionID    string `json:"session_id"`
 	ConnectionID string `json:"connection_id"`
+}
+
+// SessionConfigMsg is sent host -> relay immediately after session creation,
+// before the share URL is exposed or PTY output starts. It establishes the
+// session's permission model and initial canonical terminal geometry.
+type SessionConfigMsg struct {
+	Envelope
+	Mode     string `json:"mode"`
+	HostCols int    `json:"host_cols"`
+	HostRows int    `json:"host_rows"`
 }
 
 // SessionEndedMsg is broadcast relay -> viewers when the session tears
@@ -56,6 +73,7 @@ const (
 	ErrSessionNotFound    = "SESSION_NOT_FOUND"
 	ErrUnauthorized       = "UNAUTHORIZED"
 	ErrNotActiveWriter    = "NOT_ACTIVE_WRITER"
+	ErrReadOnlySession    = "READ_ONLY_SESSION"
 	ErrUnsupportedVersion = "UNSUPPORTED_VERSION"
 	ErrBadRequest         = "BAD_REQUEST"
 )
@@ -121,16 +139,22 @@ type AuthResponseMsg struct {
 // attempt.
 type AuthResultMsg struct {
 	Envelope
-	OK           bool   `json:"ok"`
-	Token        string `json:"token,omitempty"`
-	ConnectionID string `json:"connection_id,omitempty"`
-	Code         string `json:"code,omitempty"`
-	RetryAfterMs int64  `json:"retry_after_ms,omitempty"`
+	OK               bool   `json:"ok"`
+	Token            string `json:"token,omitempty"`
+	ConnectionID     string `json:"connection_id,omitempty"`
+	Code             string `json:"code,omitempty"`
+	RetryAfterMs     int64  `json:"retry_after_ms,omitempty"`
+	Mode             string `json:"mode,omitempty"`
+	Cols             int    `json:"cols,omitempty"`
+	Rows             int    `json:"rows,omitempty"`
+	ActiveWriterID   string `json:"active_writer_id,omitempty"`
+	ActiveWriterRole string `json:"active_writer_role,omitempty"`
 }
 
 const (
 	AuthCodeFailed      = "AUTH_FAILED"
 	AuthCodeRateLimited = "RATE_LIMITED"
+	AuthCodeOccupied    = "SESSION_OCCUPIED"
 )
 
 // InputMsg is a viewer's keystrokes (or a translated mobile quick
@@ -155,12 +179,44 @@ type InputForwardMsg struct {
 	SenderID   string `json:"sender_id"`
 }
 
+// ResizeMsg is the viewer's current terminal grid size, sent
+// viewer -> relay -> host whenever the browser terminal is fit to a new
+// viewport. Full-screen TUIs (nvim, htop, tmux, Codex/Claude TUIs) render
+// to the PTY's rows/cols, not the CSS box, so the host PTY has to track
+// the browser grid size or those apps only paint into a small top-left
+// region.
+type ResizeMsg struct {
+	Envelope
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
+// HostSizeMsg reports the host terminal's latest local geometry. The relay
+// always remembers it for reclaim, but only makes it canonical while the host
+// is the active geometry owner.
+type HostSizeMsg struct {
+	Envelope
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
+// TerminalSizeMsg broadcasts the one canonical PTY geometry to viewers. A
+// spectator renders this grid using fit or pan; it never treats its own CSS
+// viewport as an independent PTY size.
+type TerminalSizeMsg struct {
+	Envelope
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
 // TakeControlMsg requests the sender become the active writer - sent by
 // either the host or a viewer, host or viewer alike. Relay reassigns
 // immediately; a host-originated one is additionally authoritative for
 // HostLockWindow, per docs/protocol.md's Control model.
 type TakeControlMsg struct {
 	Envelope
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 }
 
 // ControlChangedMsg is broadcast to every connection (host and every
@@ -169,6 +225,8 @@ type ControlChangedMsg struct {
 	Envelope
 	ActiveWriterID   string `json:"active_writer_id"`
 	ActiveWriterRole string `json:"active_writer_role"`
+	Cols             int    `json:"cols"`
+	Rows             int    `json:"rows"`
 }
 
 // KillSwitchMsg is host -> relay: disconnect every current viewer

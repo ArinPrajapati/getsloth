@@ -152,6 +152,18 @@ func (hs *hostStub) expectNothing(t *testing.T) {
 	}
 }
 
+func configureSession(t *testing.T, hs *hostStub, mode string, cols, rows int) {
+	t.Helper()
+	if err := hs.WriteJSON(protocol.SessionConfigMsg{
+		Envelope: protocol.NewEnvelope("session_config"),
+		Mode:     mode,
+		HostCols: cols,
+		HostRows: rows,
+	}); err != nil {
+		t.Fatalf("configuring session: %v", err)
+	}
+}
+
 // authedViewer connects and authenticates a viewer, then drains the
 // presence broadcast a successful auth triggers on both sides (see
 // internal/relay/presence.go) - callers want a ready-to-use pair of
@@ -182,7 +194,7 @@ func TestTakeControl_ViewerBecomesActiveWriter_AllGetControlChanged(t *testing.T
 
 	viewer := authedViewer(t, base, created.SessionID, hs)
 
-	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
 		t.Fatalf("sending take_control: %v", err)
 	}
 
@@ -238,7 +250,7 @@ func TestInput_ForwardedToHost_WhenSenderIsActiveWriter(t *testing.T) {
 
 	viewer := authedViewer(t, base, created.SessionID, hs)
 
-	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
 		t.Fatalf("sending take_control: %v", err)
 	}
 	var hostControlChanged protocol.ControlChangedMsg
@@ -269,6 +281,52 @@ func TestInput_ForwardedToHost_WhenSenderIsActiveWriter(t *testing.T) {
 	}
 }
 
+func TestResize_OnlyForwardedFromActiveWriter(t *testing.T) {
+	base, cleanup := newTestServer(t)
+	defer cleanup()
+
+	host := dial(t, base+"/ws/host")
+	var created protocol.SessionCreatedMsg
+	readMsg(t, host, &created)
+	hs := newHostStub(t, host, true)
+
+	viewer := authedViewer(t, base, created.SessionID, hs)
+
+	if err := viewer.WriteJSON(protocol.ResizeMsg{
+		Envelope: protocol.NewEnvelope("resize"),
+		Cols:     160,
+		Rows:     44,
+	}); err != nil {
+		t.Fatalf("sending inactive resize: %v", err)
+	}
+	hs.expectNothing(t)
+
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
+		t.Fatalf("sending take_control: %v", err)
+	}
+	var hostControlChanged protocol.ControlChangedMsg
+	hs.nextSkippingPresence(t, &hostControlChanged)
+	var viewerControlChanged protocol.ControlChangedMsg
+	readMsgSkippingPresence(t, viewer, &viewerControlChanged)
+
+	if err := viewer.WriteJSON(protocol.ResizeMsg{
+		Envelope: protocol.NewEnvelope("resize"),
+		Cols:     160,
+		Rows:     44,
+	}); err != nil {
+		t.Fatalf("sending active resize: %v", err)
+	}
+
+	var resize protocol.ResizeMsg
+	hs.nextSkippingPresence(t, &resize)
+	if resize.Cols != 160 || resize.Rows != 44 {
+		t.Fatalf("forwarded resize = %dx%d, want 160x44", resize.Cols, resize.Rows)
+	}
+	if resize.Type != "resize" {
+		t.Fatalf("forwarded type = %q, want resize", resize.Type)
+	}
+}
+
 func TestTakeControl_HostReclaim_LocksOutViewerBriefly(t *testing.T) {
 	base, cleanup := newTestServer(t)
 	defer cleanup()
@@ -285,7 +343,7 @@ func TestTakeControl_HostReclaim_LocksOutViewerBriefly(t *testing.T) {
 	// presence-skipping helpers throughout this test rather than
 	// hand-count exactly how many presence messages queue up on each
 	// side at each step.
-	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
 		t.Fatalf("viewer take_control: %v", err)
 	}
 	var discard protocol.ControlChangedMsg
@@ -315,7 +373,7 @@ func TestTakeControl_HostReclaim_LocksOutViewerBriefly(t *testing.T) {
 
 	// Viewer immediately tries to take it back - must be rejected while
 	// inside HostLockWindow.
-	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
 		t.Fatalf("viewer take_control (should be locked out): %v", err)
 	}
 	var errMsg protocol.ErrorMsg

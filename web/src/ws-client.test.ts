@@ -118,13 +118,30 @@ describe('RelayClient', () => {
     });
 
     client.connect();
-    client.sendTakeControl();
-    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer' }));
+    client.sendTakeControl(120, 36);
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'control_changed', active_writer_id: 'viewer-1', active_writer_role: 'viewer', cols: 120, rows: 36 }));
     FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'presence', connections: [{ id: 'viewer-1', role: 'viewer', is_active_writer: true }] }));
 
-    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'take_control' })]);
+    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'take_control', cols: 120, rows: 36 })]);
     expect(activeWriters).toEqual(['viewer-1']);
     expect(participantCounts).toEqual([1]);
+  });
+
+  it('reports canonical terminal size broadcasts', () => {
+    const sizes: Array<{ cols: number; rows: number }> = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined,
+      onTerminalSize: (size) => sizes.push({ cols: size.cols, rows: size.rows })
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'terminal_size', cols: 160, rows: 44 }));
+
+    expect(sizes).toEqual([{ cols: 160, rows: 44 }]);
   });
 
   it('sends and receives chat messages separately from terminal output', () => {
@@ -161,6 +178,21 @@ describe('RelayClient', () => {
     client.sendInput(new Uint8Array([121, 13]));
 
     expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'input', data_base64: 'eQ0=' })]);
+  });
+
+  it('sends terminal resize messages with columns and rows', () => {
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined
+    });
+
+    client.connect();
+    client.sendResize(160, 44);
+
+    expect(FakeSocket.created[0]?.sent).toEqual([JSON.stringify({ v: 1, type: 'resize', cols: 160, rows: 44 })]);
   });
 
   it('surfaces transport errors and can disconnect explicitly', () => {

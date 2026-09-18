@@ -14,13 +14,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func testSessionConfig() protocol.SessionConfigMsg {
+	return protocol.SessionConfigMsg{
+		Envelope: protocol.NewEnvelope("session_config"),
+		Mode:     protocol.SessionModeRemote,
+		HostCols: 120,
+		HostRows: 36,
+	}
+}
+
 func TestConnectHost_ReceivesSessionCreated(t *testing.T) {
 	srv := relay.NewServer()
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -37,7 +46,7 @@ func TestRelayOutputWriter_ChunksLargeWritesAndReachesViewer(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -49,7 +58,7 @@ func TestRelayOutputWriter_ChunksLargeWritesAndReachesViewer(t *testing.T) {
 	}
 	const password = "chunk-test-password"
 	active, ptmxCh := dummyControlState()
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard, nil)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {

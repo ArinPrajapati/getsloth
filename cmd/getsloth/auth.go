@@ -10,6 +10,7 @@ import (
 
 	"github.com/arinprajapati/getsloth/internal/hostauth"
 	"github.com/arinprajapati/getsloth/internal/protocol"
+	"github.com/creack/pty"
 )
 
 // runHostMessageLoop reads every message the relay sends to the host
@@ -30,8 +31,11 @@ import (
 //
 // Blocks on ptmxCh until B2's run() has spawned the PTY (via
 // onPTYReady), then runs until the connection closes.
-func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File, chatOut io.Writer) {
+func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File, chatOut io.Writer, status *hostSessionStatus) {
 	ptmx := <-ptmxCh
+	if status != nil {
+		defer status.setDisconnected()
+	}
 
 	for {
 		_, raw, err := ws.ReadMessage()
@@ -62,7 +66,25 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 			if err := json.Unmarshal(raw, &msg); err != nil {
 				continue
 			}
+			if validGridSize(msg.Cols, msg.Rows) {
+				_ = pty.Setsize(ptmx, &pty.Winsize{
+					Rows: uint16(msg.Rows),
+					Cols: uint16(msg.Cols),
+				})
+			}
 			isActiveWriter.Store(msg.ActiveWriterRole == "host")
+			if status != nil {
+				status.updateControl(msg)
+			}
+
+		case "presence":
+			var msg protocol.PresenceMsg
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				continue
+			}
+			if status != nil {
+				status.updatePresence(msg)
+			}
 
 		case "input":
 			var msg protocol.InputForwardMsg
@@ -74,6 +96,19 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 				continue
 			}
 			_, _ = ptmx.Write(data)
+
+		case "resize":
+			var msg protocol.ResizeMsg
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				continue
+			}
+			if msg.Cols < 2 || msg.Rows < 2 || msg.Cols > 1000 || msg.Rows > 500 {
+				continue
+			}
+			_ = pty.Setsize(ptmx, &pty.Winsize{
+				Rows: uint16(msg.Rows),
+				Cols: uint16(msg.Cols),
+			})
 
 		case "chat_message":
 			var msg protocol.ChatBroadcastMsg

@@ -12,11 +12,28 @@ import (
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
+const usageText = `Usage:
+  getsloth [--remote] [command [args...]]
+  getsloth --group [command [args...]]
+
+Modes:
+  Remote mode (default)  One remote viewer can watch and take control.
+  Group mode (--group)   Multiple viewers can view and chat; the host keeps control.
+`
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: getsloth <command> [args...]")
-		os.Exit(2)
+	if args, ok := hostControlCommandArgs(os.Args); ok {
+		os.Exit(runHostControlConsole(args, os.Stdout))
 	}
+	if wantsHelp(os.Args) {
+		if _, err := io.WriteString(os.Stdout, usageText); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+
+	mode, command := launchFromArgs(os.Args)
+	hostCols, hostRows := terminalGridSize(os.Stdin)
 
 	relayURL := os.Getenv("GETSLOTH_RELAY_URL")
 	if relayURL == "" {
@@ -40,8 +57,16 @@ func main() {
 	stdout := io.Writer(os.Stdout)
 	var isActiveWriter *atomic.Bool
 	var onPTYReady func(*os.File)
+	var onHostSize func(cols, rows int)
+	var inputActions *hostInputActions
+	var controlServer *hostControlServer
 
-	ws, created, err := connectHost(relayURL)
+	ws, created, err := connectHost(relayURL, protocol.SessionConfigMsg{
+		Envelope: protocol.NewEnvelope("session_config"),
+		Mode:     mode,
+		HostCols: hostCols,
+		HostRows: hostRows,
+	})
 	if err != nil {
 		// Degrade to local-only rather than fail the whole command - a
 		// command wrapped by getsloth should still work exactly like
@@ -62,38 +87,70 @@ func main() {
 		// the URL carries the auth public key (never a secret on its
 		// own), the password is a distinct line and is never part of
 		// the URL in either the path or the fragment.
-		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL()))
+		inviteURL := shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL())
+		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", inviteURL)
 		fmt.Fprintf(os.Stderr, "getsloth: password: %s\n", password)
 
 		active := &atomic.Bool{}
 		active.Store(true) // host starts as the active writer
 		isActiveWriter = active
+		status := newHostSessionStatus(mode, os.Stderr)
+		status.setInvite(inviteURL, password)
+		controlServer, err = startHostControlServer(status.snapshot)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
+		}
+		fmt.Fprintln(os.Stderr, "getsloth: host controls: Ctrl-] r reclaim · Ctrl-] i status")
 
 		ptmxCh := make(chan *os.File, 1)
 		onPTYReady = func(f *os.File) { ptmxCh <- f }
+		onHostSize = func(cols, rows int) {
+			_ = ws.WriteJSON(protocol.HostSizeMsg{
+				Envelope: protocol.NewEnvelope("host_size"),
+				Cols:     cols,
+				Rows:     rows,
+			})
+		}
 
-		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr)
+		reclaim := func() error {
+			return ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
+		}
+		killViewers := func() error {
+			err := ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
+			if err == nil {
+				fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+				status.noteKillSwitch()
+			}
+			return err
+		}
+		if controlServer != nil {
+			controlServer.setActions(reclaim, killViewers)
+			if err := launchHostControlConsole(controlServer.socketPath); err != nil {
+				fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
+			} else {
+				fmt.Fprintln(os.Stderr, "getsloth: host control console opened in a separate Terminal window")
+			}
+		}
+		inputActions = &hostInputActions{
+			onReclaim: func() { _ = reclaim() },
+			onStatus:  status.print,
+		}
+
+		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr, status)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
 
-		// Host-triggered actions per docs/protocol.md: reclaiming
-		// control and the (soft) kill switch. v0 doesn't scan the
-		// host's raw keystroke stream for a hotkey (fragile - a byte
-		// matching the hotkey could legitimately appear split across
-		// two reads from a real program's output); a signal is a
-		// simpler, reliable "host-triggered" mechanism for the same
-		// intent, scriptable via `kill -USR2 <pid>` (reclaim control)
-		// or `kill -USR1 <pid>` (soft kill switch - disconnects
-		// viewers, session stays alive).
+		// Signals remain as scriptable alternatives to the host's local
+		// Ctrl-] command prefix: USR2 reclaims control and USR1 triggers
+		// the soft kill switch without ending the wrapped process.
 		signals := make(chan os.Signal, 2)
 		signal.Notify(signals, syscall.SIGUSR1, syscall.SIGUSR2)
 		go func() {
 			for sig := range signals {
 				switch sig {
 				case syscall.SIGUSR2:
-					_ = ws.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")})
+					_ = reclaim()
 				case syscall.SIGUSR1:
-					_ = ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
-					fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+					_ = killViewers()
 				}
 			}
 		}()
@@ -126,7 +183,11 @@ func main() {
 		close(panicKill)
 	}()
 
-	exitCode := run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady, panicKill)
+	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, onHostSize, inputActions, panicKill)
+
+	if controlServer != nil {
+		_ = controlServer.Close()
+	}
 
 	if ws != nil {
 		// os.Exit below skips deferred functions, so cleanup happens
@@ -139,4 +200,43 @@ func main() {
 	}
 
 	os.Exit(exitCode)
+}
+
+func hostControlCommandArgs(args []string) ([]string, bool) {
+	if len(args) > 1 && args[1] == "control" {
+		return args[2:], true
+	}
+	return nil, false
+}
+
+func wantsHelp(args []string) bool {
+	return len(args) == 2 && (args[1] == "--help" || args[1] == "-h")
+}
+
+func commandFromArgs(args []string) []string {
+	_, command := launchFromArgs(args)
+	return command
+}
+
+func launchFromArgs(args []string) (string, []string) {
+	mode := protocol.SessionModeRemote
+	commandStart := 1
+	if len(args) > 1 && (args[1] == "--group" || args[1] == "--remote") {
+		if args[1] == "--group" {
+			mode = protocol.SessionModeGroup
+		}
+		commandStart = 2
+	}
+	if len(args) > commandStart && args[commandStart] == "--" {
+		commandStart++
+	}
+	if len(args) > commandStart {
+		return mode, args[commandStart:]
+	}
+
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+	return mode, []string{shell}
 }

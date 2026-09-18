@@ -63,7 +63,7 @@ func TestPresence_ReflectsActiveWriterAfterTakeControl(t *testing.T) {
 
 	viewer := authedViewer(t, base, created.SessionID, hs)
 
-	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
 		t.Fatalf("sending take_control: %v", err)
 	}
 

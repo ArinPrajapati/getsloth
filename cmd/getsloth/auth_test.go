@@ -99,7 +99,7 @@ func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 	}
 	const password = "correct-horse-battery-staple"
 	active, ptmxCh := dummyControlState()
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard, nil)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestHostSeesChatFromViewer_RealRelay(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestHostSeesChatFromViewer_RealRelay(t *testing.T) {
 	const password = "chat-test-password"
 	active, ptmxCh := dummyControlState()
 	var chatOut stringBuffer
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, &chatOut)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, &chatOut, nil)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
@@ -217,7 +217,7 @@ func TestFullAuthFlow_WrongPassword_Rejected(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestFullAuthFlow_WrongPassword_Rejected(t *testing.T) {
 		t.Fatalf("NewKeyPair: %v", err)
 	}
 	active, ptmxCh := dummyControlState()
-	go runHostMessageLoop(ws, created.SessionID, "the-real-password", keys, active, ptmxCh, io.Discard)
+	go runHostMessageLoop(ws, created.SessionID, "the-real-password", keys, active, ptmxCh, io.Discard, nil)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {

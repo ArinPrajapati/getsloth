@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
@@ -34,9 +35,15 @@ func (s *Server) handleViewerMessage(session *Session, conn *Connection, remoteA
 		}
 		switch env.Type {
 		case "take_control":
-			s.handleTakeControl(session, conn)
+			var msg protocol.TakeControlMsg
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				return
+			}
+			s.handleTakeControl(session, conn, msg)
 		case "input":
 			s.handleInput(session, conn, raw)
+		case "resize":
+			s.handleResize(session, conn, raw)
 		case "chat_message":
 			s.handleChatMessage(session, conn, raw)
 		}
@@ -160,16 +167,29 @@ func (s *Server) handleAuthResponse(session *Session, msg protocol.AuthResponseM
 	}
 
 	session.mu.Lock()
-	session.tokens[token] = pending.viewerID
+	if session.mode == protocol.SessionModeRemote && session.remoteViewerID != "" && session.remoteViewerID != pending.viewerID {
+		if session.remoteSlotExpiry.IsZero() || time.Now().Before(session.remoteSlotExpiry) {
+			session.mu.Unlock()
+			_ = pending.conn.writeJSON(protocol.AuthResultMsg{
+				Envelope: protocol.NewEnvelope("auth_result"),
+				OK:       false,
+				Code:     protocol.AuthCodeOccupied,
+			})
+			return
+		}
+		session.remoteViewerID = ""
+	}
+	if session.mode == protocol.SessionModeRemote {
+		session.remoteViewerID = pending.viewerID
+		session.remoteSlotExpiry = time.Time{}
+	}
+	session.tokens[token] = tokenRecord{connectionID: pending.viewerID}
+	result := session.authResult(token, pending.viewerID)
 	session.mu.Unlock()
 
 	pending.conn.setAuthenticated(true)
-	_ = pending.conn.writeJSON(protocol.AuthResultMsg{
-		Envelope:     protocol.NewEnvelope("auth_result"),
-		OK:           true,
-		Token:        token,
-		ConnectionID: pending.viewerID,
-	})
+	_ = pending.conn.writeJSON(result)
+	session.replayOutputTo(pending.conn)
 	s.broadcastPresence(session)
 }
 
@@ -185,12 +205,27 @@ func (s *Server) handleResume(session *Session, conn *Connection, raw []byte) {
 	}
 
 	session.mu.Lock()
-	ownerID, ok := session.tokens[msg.Token]
+	record, ok := session.tokens[msg.Token]
+	if ok && !record.expiresAt.IsZero() && time.Now().After(record.expiresAt) {
+		delete(session.tokens, msg.Token)
+		if session.remoteViewerID == record.connectionID {
+			session.remoteViewerID = ""
+			session.remoteSlotExpiry = time.Time{}
+		}
+		ok = false
+	}
 	if ok {
 		delete(session.viewers, conn.ID())
-		conn.setID(ownerID)
-		session.viewers[ownerID] = conn
+		conn.setID(record.connectionID)
+		session.viewers[record.connectionID] = conn
+		record.expiresAt = time.Time{}
+		session.tokens[msg.Token] = record
+		if session.mode == protocol.SessionModeRemote {
+			session.remoteViewerID = record.connectionID
+			session.remoteSlotExpiry = time.Time{}
+		}
 	}
+	result := session.authResult(msg.Token, record.connectionID)
 	session.mu.Unlock()
 
 	if !ok {
@@ -203,11 +238,7 @@ func (s *Server) handleResume(session *Session, conn *Connection, raw []byte) {
 	}
 
 	conn.setAuthenticated(true)
-	_ = conn.writeJSON(protocol.AuthResultMsg{
-		Envelope:     protocol.NewEnvelope("auth_result"),
-		OK:           true,
-		Token:        msg.Token,
-		ConnectionID: ownerID,
-	})
+	_ = conn.writeJSON(result)
+	session.replayOutputTo(conn)
 	s.broadcastPresence(session)
 }

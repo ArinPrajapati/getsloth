@@ -17,26 +17,40 @@ export interface CreateAuthMessageOptions {
 
 const textEncoder = new TextEncoder();
 
+export class AuthCryptoUnavailableError extends Error {
+  constructor() {
+    super('Secure browser context required for password encryption. Use HTTPS, localhost, or a trusted local development setup.');
+    this.name = 'AuthCryptoUnavailableError';
+  }
+}
+
 export async function createAuthMessage(options: CreateAuthMessageOptions): Promise<AuthMessage> {
-  const viewerKeys = await crypto.subtle.generateKey(
+  const browserCrypto = globalThis.crypto as Crypto | undefined;
+  const secureContext = (globalThis as { isSecureContext?: boolean }).isSecureContext;
+
+  if (secureContext === false || !browserCrypto?.subtle) {
+    throw new AuthCryptoUnavailableError();
+  }
+
+  const viewerKeys = await browserCrypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
     true,
     ['deriveBits']
   );
-  const hostPublicKey = await crypto.subtle.importKey(
+  const hostPublicKey = await browserCrypto.subtle.importKey(
     'raw',
     toArrayBuffer(base64UrlToBytes(options.hostPublicKeyBase64Url)),
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
   );
-  const sharedSecret = await crypto.subtle.deriveBits(
+  const sharedSecret = await browserCrypto.subtle.deriveBits(
     { name: 'ECDH', public: hostPublicKey },
     viewerKeys.privateKey,
     256
   );
-  const hkdfKey = await crypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveKey']);
-  const aesKey = await crypto.subtle.deriveKey(
+  const hkdfKey = await browserCrypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveKey']);
+  const aesKey = await browserCrypto.subtle.deriveKey(
     {
       name: 'HKDF',
       hash: 'SHA-256',
@@ -48,9 +62,9 @@ export async function createAuthMessage(options: CreateAuthMessageOptions): Prom
     false,
     ['encrypt']
   );
-  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const nonce = browserCrypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt(
+    await browserCrypto.subtle.encrypt(
       {
         name: 'AES-GCM',
         iv: toArrayBuffer(nonce),
@@ -61,7 +75,7 @@ export async function createAuthMessage(options: CreateAuthMessageOptions): Prom
       toArrayBuffer(textEncoder.encode(options.password))
     )
   );
-  const viewerPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', viewerKeys.publicKey));
+  const viewerPublicKey = new Uint8Array(await browserCrypto.subtle.exportKey('raw', viewerKeys.publicKey));
   const message: AuthMessage = {
     v: 1,
     type: 'auth',

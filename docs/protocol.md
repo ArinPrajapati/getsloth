@@ -26,10 +26,18 @@ needs to deviate, this file changes first.
   actually reached the PTY), clarified that the host's own input bypasses
   the network entirely, and fixed a misattached comment and a
   limits-table field-name mismatch.
-- v5 (this version): approved for implementation. Added reconnect +
+- v5: approved for implementation. Added reconnect +
   active-writer interaction semantics and token entropy/encoding —
   the two remaining non-blocking clarifications from the final review
   pass.
+- v6: added active-writer-gated terminal `resize` messages so browser
+  xterm rows/columns are applied to the host PTY. This is required for
+  full-screen TUIs (`nvim`, `htop`, `tmux`, agent TUIs) to render across
+  the full browser terminal instead of a stale default PTY grid.
+- v7 (this version): added explicit `remote` and `group` session modes,
+  canonical terminal geometry, atomic viewer takeover with dimensions,
+  host-size restoration, and occupied/read-only errors. This prevents
+  multiple differently sized browsers from fighting over one PTY grid.
 
 ## Design rules
 
@@ -68,6 +76,17 @@ A **host** connection creates and owns exactly one session for its
 lifetime. A **viewer** connection joins an existing session and must
 authenticate (see [Auth flow](#auth-flow)) before receiving anything
 beyond `error` messages.
+
+The host configures one mode immediately after `session_created`:
+
+- **Remote** (default): one authenticated remote viewer identity; that viewer
+  may take control. Control and PTY geometry ownership transfer together.
+- **Group**: multiple authenticated viewers; the host remains the only writer
+  and geometry owner. Viewers can watch and chat but cannot send PTY input,
+  resize, or take control.
+
+Device type is never inferred. A phone, laptop, console, or TV browser follows
+the permissions of the host-selected mode.
 
 ## Share link format
 
@@ -216,8 +235,10 @@ host, including the host's own local keystrokes, which are gated by this
 exact same rule (see the note on `output` scoping below for why the host
 still needs `control_changed`).
 
-Any authenticated connection may send `take_control`; the relay
-reassigns the active writer and broadcasts `control_changed`.
+In remote mode, the authenticated viewer may send `take_control` with its
+desired `cols` and `rows`; the relay changes writer and canonical geometry as
+one transition, then broadcasts `control_changed`. In group mode, viewer
+`take_control`, `input`, and `resize` are rejected with `READ_ONLY_SESSION`.
 
 **Host `take_control` is authoritative and starts a short lock window.**
 When the host sends `take_control`, the relay reassigns immediately *and*
@@ -232,6 +253,17 @@ relay (not forwarded to the host). When a viewer *is* the active writer,
 the relay forwards their input to the host as `InputForwardMsg` (see
 Message reference) and the host writes the decoded bytes to the PTY.
 
+`resize` messages follow the same active-writer rule in remote mode. The active viewer's
+browser terminal rows/columns are forwarded to the host so the host can
+resize the real PTY. A viewer that is not the active writer must not be
+able to resize the PTY out from under whoever is currently driving.
+
+There is one canonical PTY grid for the session. Spectators resize their
+logical xterm grid to those canonical dimensions and locally fit or pan it;
+their browser viewport never becomes a second PTY size. The relay remembers
+the host's latest local size and restores it immediately when the host reclaims
+control or the active remote viewer disconnects.
+
 **Host's own input never touches the network.** The host CLI owns the
 PTY directly, so when the host is the active writer, its local keystrokes
 are written straight to the PTY, with no WebSocket round-trip in either
@@ -242,27 +274,29 @@ still read its own stdin but drop those keystrokes locally instead of
 writing them to the PTY, using the `control_changed` state it already
 has — this check is entirely local, no network call needed to make it.
 
-## Quick actions — a Frontend concept, not a wire message
+The host CLI reserves `Ctrl-]` as a local command prefix that is processed
+before this input gate. `Ctrl-] r` sends the host's authoritative
+`take_control`, so reclaim remains available while ordinary host keystrokes are
+being dropped. `Ctrl-] i` prints the current mode, viewers, connection state,
+and controller. The terminal/tab title carries the same compact status without
+consuming a PTY row; this avoids damaging full-screen TUIs. `SIGUSR2` remains a
+scriptable reclaim alternative.
 
-The mobile yes/no/continue/text UI (Task F6) translates directly to an
-`input` message client-side, using this fixed mapping:
+## Browser terminal input
 
-| Action | `input.data` (before base64) |
-|---|---|
-| yes | `y\r` |
-| no | `n\r` |
-| continue | `\r` (plain Enter) |
-| text | `{typed text}\r` |
-
-One PTY-input path on the wire, gated by active-writer status in exactly
-one place.
+The viewer uses xterm's normal keyboard/input path; there are no dedicated
+yes/no/continue controls in the session UI. Every keystroke remains an `input`
+message and is accepted only from the confirmed active writer. On touch
+devices, the terminal is focused—and the software keyboard opened—only after a
+remote-mode `control_changed` confirms the viewer owns control.
 
 ## Reconnect
 
 A viewer that briefly loses network sends `resume{token}` instead of
 `auth{...}`. If the relay-issued token is still valid (session alive, not
 invalidated by a kill switch, within `RECONNECT_WINDOW_MS` = 30000) the
-relay responds `auth_result{ok:true, connection_id}` immediately — no
+relay responds with the complete successful `auth_result` session state
+immediately — no
 host round-trip, since the relay itself is the token's issuer and
 authority.
 
@@ -306,9 +340,9 @@ Custom WebSocket close codes (application range, RFC 6455):
 | 4003 | `session_not_found` | `ErrorMsg{code:"SESSION_NOT_FOUND"}` first |
 | 4004 | `unsupported_version` | `ErrorMsg{code:"UNSUPPORTED_VERSION"}` first |
 
-`UNAUTHORIZED`, `RATE_LIMITED`, and `NOT_ACTIVE_WRITER` never close the
-connection — all three are routine, expected outcomes, not protocol
-violations.
+`UNAUTHORIZED`, `RATE_LIMITED`, `SESSION_OCCUPIED`, `READ_ONLY_SESSION`,
+and `NOT_ACTIVE_WRITER` never close the connection; they are expected outcomes,
+not protocol violations.
 
 ## Protocol version mismatch
 
@@ -345,8 +379,16 @@ interface InputMsg extends Envelope {
   data_base64: string; // PTY data isn't guaranteed valid UTF-8
 }
 
+interface ResizeMsg extends Envelope {
+  type: "resize";
+  cols: number; // terminal columns, fitted from the browser xterm surface
+  rows: number; // terminal rows, fitted from the browser xterm surface
+}
+
 interface TakeControlMsg extends Envelope {
   type: "take_control";
+  cols?: number; // required from a viewer; host reclaim uses cached host size
+  rows?: number;
 }
 
 // Rendered client-side via textContent, never innerHTML — untrusted input
@@ -359,9 +401,18 @@ interface ChatMsg extends Envelope {
 ### Host → Relay
 
 ```typescript
-// No public key here — it never touches the relay, see Share link format
-interface SessionCreateMsg extends Envelope {
-  type: "session_create";
+// Sent immediately after session_created and before output starts.
+interface SessionConfigMsg extends Envelope {
+  type: "session_config";
+  mode: "remote" | "group";
+  host_cols: number;
+  host_rows: number;
+}
+
+interface HostSizeMsg extends Envelope {
+  type: "host_size";
+  cols: number;
+  rows: number;
 }
 
 interface OutputMsg extends Envelope {
@@ -418,6 +469,15 @@ interface InputForwardMsg extends Envelope {
   data_base64: string;
   sender_id: string; // the viewer connection_id that sent it
 }
+
+// Forwarded only for the active viewer. The host applies this to the
+// real PTY rows/cols; without it, full-screen TUIs render into a stale
+// default-sized grid even if the browser CSS box is fullscreen.
+interface ResizeMsg extends Envelope {
+  type: "resize";
+  cols: number;
+  rows: number;
+}
 ```
 
 ### Relay → Viewer (before/during auth)
@@ -428,8 +488,13 @@ interface AuthResultMsg extends Envelope {
   ok: boolean;
   token?: string;                          // present when ok === true
   connection_id?: string;                  // present when ok === true — so the viewer can recognize itself in `presence`
-  code?: "AUTH_FAILED" | "RATE_LIMITED";
+  code?: "AUTH_FAILED" | "RATE_LIMITED" | "SESSION_OCCUPIED";
   retry_after_ms?: number;
+  mode?: "remote" | "group";             // present when ok === true
+  cols?: number;                           // canonical grid when ok === true
+  rows?: number;
+  active_writer_id?: string;
+  active_writer_role?: "host" | "viewer";
 }
 
 interface KickedMsg extends Envelope {
@@ -447,6 +512,12 @@ interface OutputBroadcastMsg extends Envelope {
   type: "output";
   data_base64: string;
 }
+
+interface TerminalSizeMsg extends Envelope {
+  type: "terminal_size";
+  cols: number;
+  rows: number;
+}
 ```
 
 ### Relay → all authenticated connections (host + every authenticated viewer)
@@ -460,6 +531,8 @@ interface ControlChangedMsg extends Envelope {
   type: "control_changed";
   active_writer_id: string;
   active_writer_role: "host" | "viewer";
+  cols: number;
+  rows: number;
 }
 
 interface ChatBroadcastMsg extends Envelope {
@@ -495,6 +568,7 @@ interface ErrorMsg extends Envelope {
     | "SESSION_NOT_FOUND"
     | "UNAUTHORIZED"
     | "NOT_ACTIVE_WRITER"
+    | "READ_ONLY_SESSION"
     | "UNSUPPORTED_VERSION"
     | "BAD_REQUEST";
   message: string; // human-readable, not for programmatic branching.
@@ -507,14 +581,14 @@ interface ErrorMsg extends Envelope {
 | FR | Requirement | Message(s) |
 |---|---|---|
 | 1 | Host wraps any command in a PTY | N/A — CLI-local |
-| 2 | Prints shareable URL + password | `session_create` → `session_created` (URL built from `session_id` + the host's public key in the fragment, per [Share link format](#share-link-format); password is host-local, never on the wire) |
+| 2 | Prints shareable URL + password | `session_created` → `session_config` (URL built from `session_id` + the host's public key in the fragment, per [Share link format](#share-link-format); password is host-local, never on the wire) |
 | 3 | Browser view gated by password | `auth`, `auth_result` |
 | 4 | Password verified on host, not relay | `auth_request`, `auth_response` — encrypted per [Crypto wire format](#crypto-wire-format), key never touches the relay |
 | 5 | Rate-limited attempts | `auth_result{code:"RATE_LIMITED"}` |
 | 6 | Live output streaming | `output` (host→relay→viewers only) |
-| 7 | Single active writer, instant take-control, host override | `input` (viewer→relay), `InputForwardMsg` (relay→host), `take_control`, `control_changed`, host lock window |
+| 7 | Single active writer, instant take-control, host override | `input` (viewer→relay), `InputForwardMsg` (relay→host), `resize` (viewer→relay→host), `take_control`, `control_changed`, host lock window |
 | 8 | Chat panel, never touches PTY | `chat_message` |
-| 9 | Mobile quick-actions as PTY input | Frontend-side translation to `input`, see [Quick actions](#quick-actions--a-frontend-concept-not-a-wire-message) |
+| 9 | Mobile terminal typing | `take_control{cols,rows}` confirmation, then normal xterm `input` |
 | 10 | Kill switch disconnects viewers, session survives | `kill_switch`, `kicked` |
 | 11 | Session teardown on process/CLI exit | `session_ended`, `end_session` |
 | 12 | Knowing who's in the session | `presence` |

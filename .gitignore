@@ -23,3 +23,6 @@ worktree/
 # Private deploy notes — server IPs, SSH key paths, access details.
 # This repo is going open source; none of this belongs in it.
 deploy/server-notes.md
+
+# Local Cloudflare tunnel configs for phone/manual dev testing.
+.cloudflared/

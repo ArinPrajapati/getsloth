@@ -15,6 +15,11 @@ import (
 // undo the reclaim.
 const HostLockWindow = 2 * time.Second
 
+// ReconnectWindow is how long a disconnected viewer identity and token remain
+// resumable. In Remote mode the single viewer slot is reserved for the same
+// interval so another identity cannot steal an interrupted session.
+const ReconnectWindow = 30 * time.Second
+
 // Session represents one running getsloth host and its connected
 // viewers.
 type Session struct {
@@ -24,11 +29,24 @@ type Session struct {
 	host             *Connection
 	viewers          map[string]*Connection
 	closed           bool
+	mode             string
+	cols             int
+	rows             int
+	hostCols         int
+	hostRows         int
+	remoteViewerID   string
+	remoteSlotExpiry time.Time
 	pendingAuth      map[string]pendingAuth // requestID -> the viewer awaiting a verdict
-	tokens           map[string]string      // relay-issued token -> the connection_id it authenticates
+	tokens           map[string]tokenRecord // relay-issued token -> reconnect identity and expiry
+	outputBacklog    []string               // recent base64 output chunks replayed to newly authenticated viewers
 	activeWriterID   string                 // starts "host"
 	activeWriterRole string                 // starts "host"
 	lastHostReclaim  time.Time
+}
+
+type tokenRecord struct {
+	connectionID string
+	expiresAt    time.Time
 }
 
 // pendingAuth tracks a viewer's auth attempt while it's awaiting the
@@ -40,6 +58,8 @@ type pendingAuth struct {
 	conn       *Connection
 	remoteAddr string
 }
+
+const maxOutputBacklogChunks = 256
 
 // newRandomID generates a URL-safe random identifier - used both for
 // session IDs and, for now, viewer connection IDs (B5's auth flow may
@@ -66,10 +86,41 @@ func (s *Session) addViewer(id string, c *Connection) bool {
 	return true
 }
 
-func (s *Session) removeViewer(id string) {
+func (s *Session) configure(mode string, cols, rows int) bool {
+	if mode != protocol.SessionModeRemote && mode != protocol.SessionModeGroup {
+		return false
+	}
+	if !validTerminalSize(cols, rows) {
+		return false
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.viewers, id)
+	s.mode = mode
+	s.cols = cols
+	s.rows = rows
+	s.hostCols = cols
+	s.hostRows = rows
+	s.outputBacklog = nil
+	return true
+}
+
+func validTerminalSize(cols, rows int) bool {
+	return cols >= 2 && rows >= 2 && cols <= 1000 && rows <= 500
+}
+
+func (s *Session) authResult(token, connectionID string) protocol.AuthResultMsg {
+	return protocol.AuthResultMsg{
+		Envelope:         protocol.NewEnvelope("auth_result"),
+		OK:               true,
+		Token:            token,
+		ConnectionID:     connectionID,
+		Mode:             s.mode,
+		Cols:             s.cols,
+		Rows:             s.rows,
+		ActiveWriterID:   s.activeWriterID,
+		ActiveWriterRole: s.activeWriterRole,
+	}
 }
 
 // teardown notifies every connected viewer the session has ended, closes
@@ -100,6 +151,10 @@ func (s *Session) teardown(reason string) {
 // docs/protocol.md's "Relay -> viewers only" section).
 func (s *Session) broadcastOutput(dataBase64 string) {
 	s.mu.Lock()
+	s.outputBacklog = append(s.outputBacklog, dataBase64)
+	if len(s.outputBacklog) > maxOutputBacklogChunks {
+		s.outputBacklog = s.outputBacklog[len(s.outputBacklog)-maxOutputBacklogChunks:]
+	}
 	viewers := make([]*Connection, 0, len(s.viewers))
 	for _, c := range s.viewers {
 		if c.isAuthenticated() {
@@ -114,6 +169,19 @@ func (s *Session) broadcastOutput(dataBase64 string) {
 	}
 	for _, c := range viewers {
 		_ = c.writeJSON(msg)
+	}
+}
+
+func (s *Session) replayOutputTo(conn *Connection) {
+	s.mu.Lock()
+	backlog := append([]string(nil), s.outputBacklog...)
+	s.mu.Unlock()
+
+	for _, dataBase64 := range backlog {
+		_ = conn.writeJSON(protocol.OutputMsg{
+			Envelope:   protocol.NewEnvelope("output"),
+			DataBase64: dataBase64,
+		})
 	}
 }
 
@@ -141,7 +209,12 @@ func (r *Registry) Create() (*Session, error) {
 		ID:               id,
 		viewers:          map[string]*Connection{},
 		pendingAuth:      map[string]pendingAuth{},
-		tokens:           map[string]string{},
+		tokens:           map[string]tokenRecord{},
+		mode:             protocol.SessionModeRemote,
+		cols:             protocol.DefaultCols,
+		rows:             protocol.DefaultRows,
+		hostCols:         protocol.DefaultCols,
+		hostRows:         protocol.DefaultRows,
 		activeWriterID:   "host",
 		activeWriterRole: "host",
 	}

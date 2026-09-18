@@ -1,0 +1,686 @@
+<div id="getsloth-status-bar-mock" aria-label="getsloth terminal viewer UX mock">
+  <style>
+    #getsloth-status-bar-mock {
+      --mock-bg: light-dark(#f6f3ec, #11100e);
+      --mock-ink: light-dark(#1b1814, #f4efe7);
+      --mock-muted: light-dark(#675f54, #b7ad9e);
+      --mock-border: light-dark(#d9d0c2, #3a332b);
+      --mock-panel: light-dark(#fffaf0, #181512);
+      --mock-terminal: #0d0f10;
+      --mock-terminal-ink: #d7e2d1;
+      --mock-terminal-muted: #829081;
+      --mock-bar: #1b1712;
+      --mock-bar-ink: #f6efe2;
+      --mock-accent: #d7b56d;
+      --mock-green: #7fd37b;
+      --mock-red: #ef8d7f;
+      color: var(--mock-ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: transparent;
+    }
+
+    #getsloth-status-bar-mock * {
+      box-sizing: border-box;
+    }
+
+    #getsloth-status-bar-mock .mock-shell {
+      display: grid;
+      gap: 14px;
+    }
+
+    #getsloth-status-bar-mock .mock-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #getsloth-status-bar-mock .mock-title {
+      display: grid;
+      gap: 2px;
+    }
+
+    #getsloth-status-bar-mock .mock-title strong {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    #getsloth-status-bar-mock .mock-title span {
+      color: var(--mock-muted);
+      font-size: 13px;
+    }
+
+    #getsloth-status-bar-mock .mock-choices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    #getsloth-status-bar-mock button {
+      min-height: 34px;
+      border: 1px solid var(--mock-border);
+      border-radius: 7px;
+      padding: 0 10px;
+      color: var(--mock-ink);
+      background: var(--mock-panel);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    #getsloth-status-bar-mock button[aria-pressed="true"] {
+      border-color: var(--mock-accent);
+      color: #15110c;
+      background: var(--mock-accent);
+    }
+
+    #getsloth-status-bar-mock .device-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    #getsloth-status-bar-mock .device {
+      overflow: hidden;
+      border: 1px solid var(--mock-border);
+      border-radius: 12px;
+      background: #070808;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+    }
+
+    #getsloth-status-bar-mock .device-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      color: var(--mock-muted);
+      background: var(--mock-panel);
+      border-bottom: 1px solid var(--mock-border);
+      font-size: 12px;
+    }
+
+    #getsloth-status-bar-mock .viewport {
+      position: relative;
+      min-height: 420px;
+      background: var(--mock-terminal);
+      color: var(--mock-terminal-ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    #getsloth-status-bar-mock .phone .viewport {
+      min-height: 620px;
+    }
+
+    #getsloth-status-bar-mock .terminal {
+      position: absolute;
+      inset: 0;
+      padding: 14px 14px 52px;
+      overflow: hidden;
+      font-size: var(--terminal-font-size, 13px);
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    #getsloth-status-bar-mock .phone .terminal {
+      padding: 12px 10px 58px;
+      font-size: calc(var(--terminal-font-size, 13px) - 1px);
+    }
+
+    #getsloth-status-bar-mock .phone.tui-mode .terminal {
+      padding: 10px 8px 58px;
+      font-size: 12px;
+      line-height: 1.22;
+      white-space: pre;
+    }
+
+    #getsloth-status-bar-mock .dim {
+      color: var(--mock-terminal-muted);
+    }
+
+    #getsloth-status-bar-mock .ok {
+      color: var(--mock-green);
+    }
+
+    #getsloth-status-bar-mock .warn {
+      color: var(--mock-accent);
+    }
+
+    #getsloth-status-bar-mock .statusbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      min-height: 38px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: stretch;
+      color: var(--mock-bar-ink);
+      background: color-mix(in srgb, var(--mock-bar) 94%, transparent);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      backdrop-filter: blur(10px);
+    }
+
+    #getsloth-status-bar-mock .bar-group {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 1px;
+    }
+
+    #getsloth-status-bar-mock .bar-item {
+      min-height: 38px;
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      white-space: nowrap;
+    }
+
+    #getsloth-status-bar-mock .bar-main {
+      justify-content: center;
+    }
+
+    #getsloth-status-bar-mock .bar-action {
+      border: 0;
+      border-radius: 0;
+      min-height: 38px;
+      padding: 0 12px;
+      color: var(--mock-bar-ink);
+      background: transparent;
+    }
+
+    #getsloth-status-bar-mock .bar-action.primary {
+      color: #17110a;
+      background: var(--mock-accent);
+    }
+
+    #getsloth-status-bar-mock .bar-action.message {
+      position: relative;
+    }
+
+    #getsloth-status-bar-mock .bar-action.message::after {
+      content: "";
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--mock-red);
+    }
+
+    #getsloth-status-bar-mock .dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--mock-green);
+      box-shadow: 0 0 0 3px rgba(127, 211, 123, 0.14);
+    }
+
+    #getsloth-status-bar-mock .settings {
+      position: absolute;
+      right: 10px;
+      bottom: 48px;
+      width: min(310px, calc(100% - 20px));
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      color: var(--mock-bar-ink);
+      background: #181512;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+    }
+
+    #getsloth-status-bar-mock .settings[hidden] {
+      display: none;
+    }
+
+    #getsloth-status-bar-mock .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+    }
+
+    #getsloth-status-bar-mock .swatches {
+      display: flex;
+      gap: 6px;
+    }
+
+    #getsloth-status-bar-mock .swatch {
+      width: 22px;
+      height: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+    }
+
+    #getsloth-status-bar-mock .swatch:nth-child(1) {
+      background: #0d0f10;
+    }
+
+    #getsloth-status-bar-mock .swatch:nth-child(2) {
+      background: #16120f;
+    }
+
+    #getsloth-status-bar-mock .swatch:nth-child(3) {
+      background: #101319;
+    }
+
+    #getsloth-status-bar-mock .phone .statusbar {
+      min-height: 44px;
+      grid-template-columns: 1fr;
+      align-content: stretch;
+      font-size: 11px;
+    }
+
+    #getsloth-status-bar-mock .phone .bar-group {
+      justify-content: space-between;
+    }
+
+    #getsloth-status-bar-mock .phone .bar-main {
+      display: none;
+    }
+
+    #getsloth-status-bar-mock .phone .bar-meta {
+      display: grid;
+      grid-template-columns: 1fr auto;
+    }
+
+    #getsloth-status-bar-mock .phone .bar-item {
+      min-height: 40px;
+      padding: 0 8px;
+    }
+
+    #getsloth-status-bar-mock .phone .hide-on-phone {
+      display: none;
+    }
+
+    #getsloth-status-bar-mock .phone .bar-tools {
+      justify-content: end;
+    }
+
+    #getsloth-status-bar-mock .phone .bar-action {
+      min-width: 42px;
+      min-height: 40px;
+      padding: 0 9px;
+    }
+
+    #getsloth-status-bar-mock .mobile-composer {
+      position: absolute;
+      right: 0;
+      bottom: 44px;
+      left: 0;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      color: var(--mock-bar-ink);
+      background: color-mix(in srgb, var(--mock-bar) 96%, transparent);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #getsloth-status-bar-mock .composer-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    #getsloth-status-bar-mock .composer-input {
+      min-width: 0;
+      min-height: 42px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      padding: 0 10px;
+      color: var(--mock-bar-ink);
+      background: rgba(255, 255, 255, 0.06);
+      font: inherit;
+      font-size: 16px;
+    }
+
+    #getsloth-status-bar-mock .keyboard {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 44%;
+      display: none;
+      align-content: start;
+      gap: 6px;
+      padding: 10px;
+      background: #2a2b2d;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #getsloth-status-bar-mock .keyboard-row {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 5px;
+    }
+
+    #getsloth-status-bar-mock .key {
+      min-height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: #f6f6f7;
+      background: #55575b;
+      font-size: 12px;
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .terminal {
+      padding-bottom: calc(44% + 110px);
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .statusbar {
+      bottom: 44%;
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .mobile-composer {
+      bottom: calc(44% + 44px);
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .keyboard {
+      display: grid;
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .settings {
+      bottom: calc(44% + 48px);
+    }
+
+    #getsloth-status-bar-mock .terminal-keys {
+      position: absolute;
+      right: 0;
+      bottom: 44%;
+      left: 0;
+      display: none;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 1px;
+      color: var(--mock-bar-ink);
+      background: #12100d;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 11px;
+    }
+
+    #getsloth-status-bar-mock .terminal-keys button {
+      min-height: 38px;
+      border: 0;
+      border-radius: 0;
+      color: var(--mock-bar-ink);
+      background: transparent;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .terminal-keys {
+      display: grid;
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .statusbar {
+      display: none;
+    }
+
+    #getsloth-status-bar-mock .keyboard-open .mobile-composer {
+      bottom: calc(44% + 38px);
+    }
+
+    #getsloth-status-bar-mock .hidden-ui .statusbar,
+    #getsloth-status-bar-mock .hidden-ui .settings {
+      display: none;
+    }
+
+    #getsloth-status-bar-mock .hidden-ui .terminal {
+      padding-bottom: 14px;
+    }
+
+    #getsloth-status-bar-mock .phone.hidden-ui .terminal {
+      padding-bottom: 12px;
+    }
+
+    @media (max-width: 760px) {
+      #getsloth-status-bar-mock .device-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+
+  <div class="mock-shell">
+    <div class="mock-toolbar" aria-label="Mock options">
+      <div class="mock-title">
+        <strong>Terminal-first viewer direction</strong>
+        <span>Status bar supports the session; typing is first-class on phone.</span>
+      </div>
+      <div class="mock-choices">
+        <button type="button" data-mode="status" aria-pressed="true">Status bar shown</button>
+        <button type="button" data-mode="clean" aria-pressed="false">Clean terminal</button>
+        <button type="button" data-mode="typing" aria-pressed="false">Phone typing</button>
+        <button type="button" data-mode="tui" aria-pressed="false">TUI on phone</button>
+        <button type="button" data-mode="settings" aria-pressed="false">Settings open</button>
+      </div>
+    </div>
+
+    <div class="device-grid">
+      <section class="device desktop" aria-label="Desktop browser mock">
+        <div class="device-label">
+          <span>Desktop / laptop browser</span>
+          <span>single-line tmux bar</span>
+        </div>
+        <div class="viewport">
+          <div class="terminal" aria-label="Terminal output desktop">
+<span class="dim">$ getsloth claude</span>
+<span class="ok">connected</span> relay=wss://getsloth.dev/s/a82f
+
+Claude Code v2.1.274
+Working in ~/campfire/projects/session-share
+
+● Reading frontend state...
+● Running integration checks...
+<span class="warn">?</span> Permission requested: allow command `npm run build`
+
+Diff preview
+  web/src/viewer-app.ts
+  + wire status bar state
+  + route chat through overlay
+
+<span class="dim">Waiting for user input...</span></div>
+          <div class="statusbar" aria-label="Session status bar desktop">
+            <div class="bar-group bar-meta">
+              <span class="bar-item"><span class="dot"></span> live</span>
+              <span class="bar-item hide-on-phone">host driving</span>
+              <span class="bar-item hide-on-phone">3 viewers</span>
+            </div>
+            <div class="bar-group bar-main" aria-label="Session focus">
+              <span class="bar-item">waiting for terminal input</span>
+            </div>
+            <div class="bar-group bar-tools">
+              <button type="button" class="bar-action message">Chat</button>
+              <button type="button" class="bar-action primary">Type</button>
+              <button type="button" class="bar-action">Control</button>
+              <button type="button" class="bar-action" data-settings-button>Settings</button>
+            </div>
+          </div>
+          <div class="settings" aria-label="Terminal settings desktop" hidden>
+            <div class="settings-row"><strong>Terminal settings</strong><span>viewer only</span></div>
+            <div class="settings-row"><span>Theme</span><span class="swatches"><span class="swatch"></span><span class="swatch"></span><span class="swatch"></span></span></div>
+            <div class="settings-row"><span>Font size</span><span>13 / 15 / 17</span></div>
+            <div class="settings-row"><span>Status bar</span><span>show / hide</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="device phone" aria-label="Phone browser mock">
+        <div class="device-label">
+          <span>Phone browser</span>
+          <span>two-row compact bar</span>
+        </div>
+        <div class="viewport">
+          <div class="terminal terminal-phone-normal" aria-label="Terminal output phone">
+<span class="dim">$ getsloth claude</span>
+<span class="ok">live</span> session a82f
+
+Claude Code
+● Running checks...
+● Build passed
+
+<span class="warn">?</span> Allow command?
+`npm run build`
+
+Diff
+  + status bar
+  + chat overlay
+  + settings menu
+
+<span class="dim">Waiting...</span></div>
+          <div class="terminal terminal-phone-tui" aria-label="TUI terminal output phone" hidden><span class="dim">  1 [|||||                 ]  Tasks: 89, 1715 thr
+  2 [|||                   ]  Load average: 1.02 0.81
+  3 [||||                  ]  Uptime: 6 days, 07:14
+  4 [|                     ]
+  Mem[</span><span class="ok">2456/2969MB</span><span class="dim">]
+  Swp[                     ]</span>
+<span class="ok">  PID PRI  NI  VIRT   RES   SHR S </span><span class="warn">CPU%</span><span class="ok"> MEM%</span>
+<span class="warn">16508  20   0  9724  2144   728 R 14.6  0.1</span>
+  258  12  -8  163M 11892  5244 S  7.9  0.4
+  812  18  -2 1688M  135M 30660 S  7.3  4.6
+ 3420  20   0 2188M  260M 51748 S  6.7  8.8
+12706  20   0 1589M 87480 34892 S  6.7  2.9
+ 1018  20   0 2688M  135M 30660 S  2.1  4.6
+  284  11  -9  163M 11892  5244 S  1.2  0.4
+  812  18  -2 1688M  134M 30660 S  1.8  4.5
+  283  20   0  163M 11892  5244 S  1.2  0.4
+12726  16  -4 1589M 87480 34892 S  1.2  2.9
+  285  20   0  163M 11892  5244 S  1.2  0.4
+ 8389  20   0 12572  1664   932 S  1.2  0.1
+15460  22   2 1522M 59468 22624 S  1.2  2.0
+1753   4 -16  163M 11892  5244 S  0.6  0.4
+<span class="warn">F1</span><span class="ok">Help</span> <span class="warn">F2</span><span class="ok">Setup</span> <span class="warn">F3</span><span class="ok">Search</span> <span class="warn">F4</span><span class="ok">Filter</span> <span class="warn">F5</span><span class="ok">Tree</span></div>
+          <div class="statusbar" aria-label="Session status bar phone">
+            <div class="bar-group bar-meta">
+              <span class="bar-item"><span class="dot"></span> live</span>
+              <span class="bar-item">host</span>
+            </div>
+            <div class="bar-group bar-main" aria-label="Session focus"></div>
+            <div class="bar-group bar-tools">
+              <button type="button" class="bar-action message">Chat</button>
+              <button type="button" class="bar-action primary">Type</button>
+              <button type="button" class="bar-action" data-settings-button>Set</button>
+            </div>
+          </div>
+          <div class="mobile-composer" aria-label="Mobile terminal input">
+            <div class="composer-row">
+              <input class="composer-input" value="npm run build" aria-label="Terminal input preview">
+              <button type="button" class="bar-action primary">Send</button>
+            </div>
+          </div>
+          <div class="terminal-keys" aria-label="Terminal keyboard helper row">
+            <button type="button">Esc</button>
+            <button type="button">Ctrl</button>
+            <button type="button">Tab</button>
+            <button type="button">↑</button>
+            <button type="button">↓</button>
+            <button type="button">←</button>
+            <button type="button">→</button>
+          </div>
+          <div class="settings" aria-label="Terminal settings phone" hidden>
+            <div class="settings-row"><strong>Settings</strong><span>viewer</span></div>
+            <div class="settings-row"><span>Theme</span><span class="swatches"><span class="swatch"></span><span class="swatch"></span><span class="swatch"></span></span></div>
+            <div class="settings-row"><span>Font</span><span>13 / 15 / 17</span></div>
+          </div>
+          <div class="keyboard" aria-label="Phone keyboard space">
+            <div class="keyboard-row"><span class="key">q</span><span class="key">w</span><span class="key">e</span><span class="key">r</span><span class="key">t</span><span class="key">y</span><span class="key">u</span><span class="key">i</span><span class="key">o</span><span class="key">p</span></div>
+            <div class="keyboard-row"><span class="key">a</span><span class="key">s</span><span class="key">d</span><span class="key">f</span><span class="key">g</span><span class="key">h</span><span class="key">j</span><span class="key">k</span><span class="key">l</span><span class="key">↵</span></div>
+            <div class="keyboard-row"><span class="key">⇧</span><span class="key">z</span><span class="key">x</span><span class="key">c</span><span class="key">v</span><span class="key">b</span><span class="key">n</span><span class="key">m</span><span class="key">⌫</span><span class="key">⏎</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const root = document.getElementById("getsloth-status-bar-mock");
+    const state = {
+      mode: "status",
+      fontSize: 13,
+      terminalBg: "#0d0f10",
+      accent: "#d7b56d"
+    };
+
+    function renderMock() {
+      root.style.setProperty("--terminal-font-size", `${state.fontSize}px`);
+      root.style.setProperty("--mock-terminal", state.terminalBg);
+      root.style.setProperty("--mock-accent", state.accent);
+      const showSettings = state.mode === "settings";
+      const hideUi = state.mode === "clean";
+      const typing = state.mode === "typing" || state.mode === "tui";
+      const tui = state.mode === "tui";
+
+      for (const device of root.querySelectorAll(".device")) {
+        device.classList.toggle("hidden-ui", hideUi);
+        device.classList.toggle("keyboard-open", typing && device.classList.contains("phone"));
+        device.classList.toggle("tui-mode", tui && device.classList.contains("phone"));
+      }
+
+      for (const panel of root.querySelectorAll(".settings")) {
+        panel.hidden = !showSettings;
+      }
+
+      for (const panel of root.querySelectorAll(".mobile-composer")) {
+        panel.hidden = !typing;
+      }
+
+      for (const normal of root.querySelectorAll(".terminal-phone-normal")) {
+        normal.hidden = tui;
+      }
+
+      for (const tuiTerminal of root.querySelectorAll(".terminal-phone-tui")) {
+        tuiTerminal.hidden = !tui;
+      }
+
+      for (const button of root.querySelectorAll("[data-mode]")) {
+        button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
+      }
+    }
+
+    for (const button of root.querySelectorAll("[data-mode]")) {
+      button.addEventListener("click", () => {
+        state.mode = button.dataset.mode;
+        renderMock();
+      });
+    }
+
+    for (const button of root.querySelectorAll("[data-settings-button]")) {
+      button.addEventListener("click", () => {
+        state.mode = state.mode === "settings" ? "status" : "settings";
+        renderMock();
+      });
+    }
+
+    renderMock();
+
+    if (globalThis.Tweak) {
+      const tweak = new Tweak({ container: root, onChange: renderMock });
+      tweak.addSelect(state, "mode", {
+        label: "Viewer chrome",
+        reference: "viewer.mode",
+        options: [
+          { label: "Status bar shown", value: "status" },
+          { label: "Clean terminal", value: "clean" },
+          { label: "Phone typing", value: "typing" },
+          { label: "TUI on phone", value: "tui" },
+          { label: "Settings open", value: "settings" }
+        ]
+      });
+      tweak.addSlider(state, "fontSize", { label: "Terminal font", min: 11, max: 18, unit: "px", reference: "terminal.font" });
+      tweak.addColorPicker(state, "terminalBg", { label: "Terminal background", reference: "--mock-terminal" });
+      tweak.addColorPicker(state, "accent", { label: "Action accent", reference: "--mock-accent" });
+    }
+  </script>
+</div>

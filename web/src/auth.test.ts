@@ -1,9 +1,28 @@
-import { createAuthMessage, rawPublicKeyToFragmentKey } from './auth';
+import { AuthCryptoUnavailableError, createAuthMessage, rawPublicKeyToFragmentKey } from './auth';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
 describe('createAuthMessage', () => {
+  it('explains when browser crypto is unavailable', async () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'isSecureContext');
+    Object.defineProperty(globalThis, 'isSecureContext', { configurable: true, value: false });
+
+    try {
+      await expect(createAuthMessage({
+        sessionId: 'session-123',
+        hostPublicKeyBase64Url: 'bad-key',
+        password: 'secret'
+      })).rejects.toThrow(AuthCryptoUnavailableError);
+    } finally {
+      if (original) {
+        Object.defineProperty(globalThis, 'isSecureContext', original);
+      } else {
+        Reflect.deleteProperty(globalThis, 'isSecureContext');
+      }
+    }
+  });
+
   it('encrypts the password to the host public key using the protocol wire format', async () => {
     const hostKeys = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' },

@@ -32,8 +32,10 @@ output latency, well under the 300ms target.
 coverage on internal/relay, real end-to-end tests (not just unit tests)
 for the crypto auth flow, control handoff, and kill switch. Open items:
 confirm module path before going public, manual interactive-terminal
-check still needed, signal-based host triggers (kill switch/reclaim)
-aren't discoverable in-session yet.
+check still needed. Reclaim is now discoverable in-session: `Ctrl-] r`
+reclaims and `Ctrl-] i` reports status; the terminal title shows live
+mode/viewer/controller state without stealing a TUI row. The local soft kill
+switch remains signal-based and is intentionally absent from the web viewer.
 
 ## Phase 1B: Frontend (TypeScript + xterm.js) — Browser Viewer — assigned to Pi
 - [x] F1: Project scaffold + tooling wired to CONSTRAINTS.md
@@ -41,10 +43,9 @@ aren't discoverable in-session yet.
 - [x] F3: Password gate UI
 - [x] F4: Take-control button + presence/control indicator
 - [x] F5: Chat panel
-- [x] F6: Mobile quick-action overlay (yes/no/continue + text) — logic/tests
-      by Pi, styling/layout completed by Claude. Real-phone manual check
-      (plan.md's explicit acceptance criterion) still outstanding — human
-      task, not agent-verifiable.
+- [x] F6: Mobile quick-action overlay — completed historically, then removed
+      from the live viewer by the approved terminal-first UX. Mobile now uses
+      normal xterm input after control is confirmed.
 - [x] F7: Kicked / session-ended states — by Claude
 - [ ] F8: Responsive + accessibility + performance pass
 
@@ -55,6 +56,25 @@ aren't discoverable in-session yet.
 - [ ] I2: Manual multi-device verification (phone + laptop, real network) — human-only task
 
 **Checkpoint:** v0 works end-to-end on real devices, founder sign-off.
+
+## Phase 2.5: Session modes + terminal geometry
+
+Detailed product and implementation contract:
+`docs/session-modes-v0-plan.md`.
+
+- [x] M0: Approve Remote mode / Group mode boundary and update protocol
+- [x] M1: CLI mode selection + correct host geometry lifecycle
+- [x] M2: Relay viewer-limit, read-only group policy, and canonical geometry
+- [x] M3: Browser session-state/control protocol updates
+- [x] M4: Canonical-grid terminal rendering with fit/pan mobile viewing —
+      automated coverage complete; real-device/TUI matrix remains under M6
+- [x] M5: Mode-aware status bar and intentional mobile typing flow — console
+      focus polish remains part of the later responsive/a11y pass; host-side
+      title/status and local reclaim controls are also implemented
+- [ ] M6: Multi-device shell/TUI verification
+
+**Checkpoint:** phone remote control is correct in Remote mode; Group mode is
+stable host-sized viewing/chat without remote terminal control.
 
 ## Phase 3: UI/Design Pass
 Added after Phase 2 was scoped — explicitly sequenced to start only

@@ -53,6 +53,36 @@ func TestAuth_CorrectPassword_GrantsTokenAndUnlocksOutput(t *testing.T) {
 	}
 }
 
+func TestAuth_CorrectPassword_ReplaysRecentOutput(t *testing.T) {
+	base, cleanup := newTestServer(t)
+	defer cleanup()
+
+	host := dial(t, base+"/ws/host")
+	var created protocol.SessionCreatedMsg
+	readMsg(t, host, &created)
+	hs := newHostStub(t, host, true)
+
+	if err := hs.WriteJSON(protocol.OutputMsg{
+		Envelope:   protocol.NewEnvelope("output"),
+		DataBase64: base64.StdEncoding.EncodeToString([]byte("sh-3.2$ ")),
+	}); err != nil {
+		t.Fatalf("host WriteJSON: %v", err)
+	}
+
+	viewer := dial(t, base+"/ws/viewer/"+created.SessionID)
+	result := authenticateViewer(t, viewer)
+	if !result.OK {
+		t.Fatalf("auth_result.ok = false, want true")
+	}
+
+	var got protocol.OutputMsg
+	readMsg(t, viewer, &got)
+	data, _ := base64.StdEncoding.DecodeString(got.DataBase64)
+	if string(data) != "sh-3.2$ " {
+		t.Errorf("replayed output = %q, want shell prompt", data)
+	}
+}
+
 func TestAuth_WrongPassword_Rejected_OutputStaysGated(t *testing.T) {
 	base, cleanup := newTestServer(t)
 	defer cleanup()
