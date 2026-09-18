@@ -198,6 +198,21 @@ function wireStatusBar(root: HTMLElement, terminal: ReturnType<typeof createTerm
     }
   }
 
+  function blurTextEntryForNonTypingTap(event: Event): void {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement) || isTextEntryTarget(target) || target.closest('[data-panel="type"]')) {
+      return;
+    }
+
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  }
+
+  root.addEventListener('pointerdown', blurTextEntryForNonTypingTap);
+  root.addEventListener('mousedown', blurTextEntryForNonTypingTap);
+
   for (const button of buttons) {
     button.setAttribute('aria-pressed', 'false');
     button.addEventListener('click', () => {
@@ -212,6 +227,10 @@ function wireStatusBar(root: HTMLElement, terminal: ReturnType<typeof createTerm
       showPanel(shouldClose ? null : panelName);
     });
   }
+}
+
+function isTextEntryTarget(target: HTMLElement): boolean {
+  return target.closest('input, textarea, select, [contenteditable="true"]') !== null;
 }
 
 function roleLabel(role: 'host' | 'viewer'): string {

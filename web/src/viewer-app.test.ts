@@ -170,6 +170,30 @@ describe('mountViewerApp', () => {
     expect(terminal.focusCalls).toBe(1);
   });
 
+  it('blurs mobile text entry when a non-typing surface is tapped', () => {
+    const root = document.createElement('div');
+    const terminal = new FakeTerminal();
+    const outsideInput = document.createElement('input');
+    document.body.append(outsideInput);
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => terminal,
+      createClient: () => ({ connect: vi.fn(), disconnect: vi.fn(), sendAuth: vi.fn(), sendChatMessage: vi.fn(), sendInput: vi.fn(), sendResize: vi.fn(), sendTakeControl: vi.fn() })
+    });
+
+    outsideInput.focus();
+    expect(document.activeElement).toBe(outsideInput);
+
+    root.querySelector<HTMLElement>('[aria-label="Terminal output"]')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    expect(document.activeElement).not.toBe(outsideInput);
+    expect(terminal.focusCalls).toBe(0);
+
+    outsideInput.remove();
+  });
+
   it('shows auth failures without revealing the terminal', () => {
     const root = document.createElement('div');
     const capturedOptions: Parameters<ViewerClientFactory>[0][] = [];
