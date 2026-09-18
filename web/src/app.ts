@@ -49,9 +49,11 @@ export function renderAppShell(root: HTMLElement): void {
   const typeButton = statusButton('Type', 'type');
   typeButton.className = 'status-bar-button primary';
   typeButton.setAttribute('aria-label', 'Focus terminal input');
+  typeButton.dataset.remoteOnly = 'true';
 
   const controlButton = statusButton('Control', 'control');
   controlButton.setAttribute('aria-label', 'Open session control');
+  controlButton.dataset.remoteOnly = 'true';
 
   const settingsButton = statusButton('Settings', 'settings');
   settingsButton.setAttribute('aria-label', 'Open terminal settings');
@@ -118,8 +120,23 @@ function createSettingsPanel(): HTMLElement {
 
   const themeLabel = document.createElement('p');
   themeLabel.className = 'settings-note';
-  themeLabel.textContent = 'Viewer-local theme controls land in the implementation pass.';
+  themeLabel.textContent = 'Fit keeps the whole terminal visible. Actual size preserves readable text and allows panning.';
 
-  form.append(title, fontLabel, fontSelect, themeLabel);
+  const viewLabel = document.createElement('label');
+  viewLabel.htmlFor = 'terminal-view-mode';
+  viewLabel.textContent = 'Terminal view';
+
+  const viewSelect = document.createElement('select');
+  viewSelect.id = 'terminal-view-mode';
+  viewSelect.name = 'terminal-view-mode';
+
+  for (const [value, label] of [['fit', 'Fit to screen'], ['actual', 'Actual size']] as const) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    viewSelect.append(option);
+  }
+
+  form.append(title, viewLabel, viewSelect, themeLabel, fontLabel, fontSelect);
   return form;
 }

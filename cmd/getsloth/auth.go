@@ -63,6 +63,12 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 			if err := json.Unmarshal(raw, &msg); err != nil {
 				continue
 			}
+			if validGridSize(msg.Cols, msg.Rows) {
+				_ = pty.Setsize(ptmx, &pty.Winsize{
+					Rows: uint16(msg.Rows),
+					Cols: uint16(msg.Cols),
+				})
+			}
 			isActiveWriter.Store(msg.ActiveWriterRole == "host")
 
 		case "input":

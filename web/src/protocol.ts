@@ -6,7 +6,17 @@ export type RelayMessage =
   | KickedMsg
   | OutputMsg
   | PresenceMsg
-  | SessionEndedMsg;
+  | SessionEndedMsg
+  | TerminalSizeMsg;
+
+export type SessionMode = 'remote' | 'group';
+
+export interface TerminalSizeMsg {
+  v: 1;
+  type: 'terminal_size';
+  cols: number;
+  rows: number;
+}
 
 export interface KickedMsg {
   v: 1;
@@ -34,6 +44,8 @@ export interface ControlChangedMsg {
   type: 'control_changed';
   active_writer_id: string;
   active_writer_role: 'host' | 'viewer';
+  cols: number;
+  rows: number;
 }
 
 export interface PresenceConnection {
@@ -55,14 +67,19 @@ export interface AuthResultMsg {
   ok: boolean;
   token?: string;
   connection_id?: string;
-  code?: 'AUTH_FAILED' | 'RATE_LIMITED';
+  code?: 'AUTH_FAILED' | 'RATE_LIMITED' | 'SESSION_OCCUPIED';
   retry_after_ms?: number;
+  mode?: SessionMode;
+  cols?: number;
+  rows?: number;
+  active_writer_id?: string;
+  active_writer_role?: 'host' | 'viewer';
 }
 
 export interface ErrorMsg {
   v: 1;
   type: 'error';
-  code: 'SESSION_NOT_FOUND' | 'UNAUTHORIZED' | 'NOT_ACTIVE_WRITER' | 'UNSUPPORTED_VERSION' | 'BAD_REQUEST';
+  code: 'SESSION_NOT_FOUND' | 'UNAUTHORIZED' | 'NOT_ACTIVE_WRITER' | 'READ_ONLY_SESSION' | 'UNSUPPORTED_VERSION' | 'BAD_REQUEST';
   message: string;
 }
 
@@ -101,7 +118,12 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
       ...(typeof parsed.token === 'string' ? { token: parsed.token } : {}),
       ...(typeof parsed.connection_id === 'string' ? { connection_id: parsed.connection_id } : {}),
       ...(isAuthFailureCode(parsed.code) ? { code: parsed.code } : {}),
-      ...(typeof parsed.retry_after_ms === 'number' ? { retry_after_ms: parsed.retry_after_ms } : {})
+      ...(typeof parsed.retry_after_ms === 'number' ? { retry_after_ms: parsed.retry_after_ms } : {}),
+      ...(isSessionMode(parsed.mode) ? { mode: parsed.mode } : {}),
+      ...(isTerminalDimension(parsed.cols) ? { cols: parsed.cols } : {}),
+      ...(isTerminalDimension(parsed.rows) ? { rows: parsed.rows } : {}),
+      ...(typeof parsed.active_writer_id === 'string' ? { active_writer_id: parsed.active_writer_id } : {}),
+      ...(isRole(parsed.active_writer_role) ? { active_writer_role: parsed.active_writer_role } : {})
     };
   }
 
@@ -125,14 +147,22 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
   if (
     parsed.type === 'control_changed' &&
     typeof parsed.active_writer_id === 'string' &&
-    isRole(parsed.active_writer_role)
+    isRole(parsed.active_writer_role) &&
+    isTerminalDimension(parsed.cols) &&
+    isTerminalDimension(parsed.rows)
   ) {
     return {
       v: 1,
       type: 'control_changed',
       active_writer_id: parsed.active_writer_id,
-      active_writer_role: parsed.active_writer_role
+      active_writer_role: parsed.active_writer_role,
+      cols: parsed.cols,
+      rows: parsed.rows
     };
+  }
+
+  if (parsed.type === 'terminal_size' && isTerminalDimension(parsed.cols) && isTerminalDimension(parsed.rows)) {
+    return { v: 1, type: 'terminal_size', cols: parsed.cols, rows: parsed.rows };
   }
 
   if (parsed.type === 'presence' && Array.isArray(parsed.connections)) {
@@ -215,13 +245,22 @@ function isErrorCode(value: unknown): value is ErrorMsg['code'] {
     value === 'SESSION_NOT_FOUND' ||
     value === 'UNAUTHORIZED' ||
     value === 'NOT_ACTIVE_WRITER' ||
+    value === 'READ_ONLY_SESSION' ||
     value === 'UNSUPPORTED_VERSION' ||
     value === 'BAD_REQUEST'
   );
 }
 
 function isAuthFailureCode(value: unknown): value is NonNullable<AuthResultMsg['code']> {
-  return value === 'AUTH_FAILED' || value === 'RATE_LIMITED';
+  return value === 'AUTH_FAILED' || value === 'RATE_LIMITED' || value === 'SESSION_OCCUPIED';
+}
+
+function isSessionMode(value: unknown): value is SessionMode {
+  return value === 'remote' || value === 'group';
+}
+
+function isTerminalDimension(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 function isPresenceConnection(value: unknown): value is PresenceConnection {

@@ -1,6 +1,10 @@
 package relay
 
-import "github.com/arinprajapati/getsloth/internal/protocol"
+import (
+	"time"
+
+	"github.com/arinprajapati/getsloth/internal/protocol"
+)
 
 // handleKillSwitch disconnects every currently connected viewer and
 // invalidates every issued token, but leaves the session (and the host
@@ -14,7 +18,9 @@ func (s *Server) handleKillSwitch(session *Session) {
 		viewers = append(viewers, v)
 	}
 	session.viewers = map[string]*Connection{}
-	session.tokens = map[string]string{}
+	session.tokens = map[string]tokenRecord{}
+	session.remoteViewerID = ""
+	session.remoteSlotExpiry = time.Time{}
 
 	// Any auth attempt still awaiting a host verdict at this moment
 	// belongs to a connection about to be kicked - clear it now rather

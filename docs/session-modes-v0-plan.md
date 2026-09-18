@@ -1,6 +1,6 @@
 # getsloth v0 session modes and terminal geometry plan
 
-Status: proposed for founder approval before implementation.
+Status: approved and implemented in the UX worktree; real-device/TUI validation remains.
 
 ## Why this exists
 
@@ -138,17 +138,17 @@ logical columns/rows remain canonical.
 
 ## Protocol revision
 
-Update `docs/protocol.md` before implementation. The exact naming may change in
-review, but the contract needs these semantics.
+The implemented protocol uses the following shapes. `docs/protocol.md` is the
+schema of record.
 
 ### Session creation
 
 Host creation declares:
 
 ```typescript
-interface SessionCreateMsg {
+interface SessionConfigMsg {
   v: 1;
-  type: "session_create";
+  type: "session_config";
   mode: "remote" | "group";
   host_cols: number;
   host_rows: number;
@@ -157,12 +157,15 @@ interface SessionCreateMsg {
 
 ### Authenticated session state
 
-Sent before any replayed output:
+Returned in the successful `auth_result` before any replayed output:
 
 ```typescript
-interface SessionStateMsg {
+interface AuthResultMsg {
   v: 1;
-  type: "session_state";
+  type: "auth_result";
+  ok: true;
+  token: string;
+  connection_id: string;
   mode: "remote" | "group";
   cols: number;
   rows: number;
@@ -258,13 +261,13 @@ model exists.
 
 ## Implementation sequence
 
-### M0 — contract approval
+### M0 — contract approval — complete
 
 - Review and approve this mode boundary.
 - Update `docs/protocol.md` first.
 - Mark the old unrestricted multi-view control behavior as superseded for v0.
 
-### M1 — CLI mode and host geometry
+### M1 — CLI mode and host geometry — complete
 
 - Parse `--group`; default to remote.
 - Start PTY with the host's real size synchronously.
@@ -272,24 +275,25 @@ model exists.
 - Restore cached host size on reclaim/disconnect.
 - Add Go tests around command parsing and geometry ownership.
 
-### M2 — relay policy and state
+### M2 — relay policy and state — complete
 
 - Store mode and terminal geometry in each session.
 - Enforce one remote identity plus reconnect reservation in remote mode.
 - Enforce host-only input/control/resize in group mode.
 - Make remote takeover update control and geometry atomically.
 - Reassign host and restore host geometry on active-viewer disconnect.
-- Add geometry epochs to output replay.
+- Clear buffered raw output on every canonical geometry change so replay never
+  mixes bytes drawn for different grids (the v0 equivalent of an epoch).
 - Add adversarial tests proving forbidden messages never reach the host PTY.
 
-### M3 — browser protocol client
+### M3 — browser protocol client — complete
 
 - Parse session-state and terminal-size messages.
 - Send desired dimensions with take-control.
 - Surface occupied/read-only errors as explicit states.
 - Keep resize sends disabled until control is confirmed.
 
-### M4 — canonical-grid terminal renderer
+### M4 — canonical-grid terminal renderer — implemented; device validation pending
 
 - Separate logical terminal rows/columns from the browser container size.
 - Active remote controller fits xterm and proposes PTY dimensions.
@@ -297,13 +301,13 @@ model exists.
 - Refit on `visualViewport` changes while typing and keep the cursor visible.
 - Ensure pan gestures never focus xterm or summon the mobile keyboard.
 
-### M5 — mode-aware status bar
+### M5 — mode-aware status bar — implemented; console focus polish pending
 
 - Remote: Watch/Type/control states described above.
 - Group: connection, chat, Fit/Actual size, settings; no control affordance.
 - Add keyboard/controller focus styling for TV and console browsers.
 
-### M6 — end-to-end verification
+### M6 — end-to-end verification — pending
 
 - Run automated Go and TypeScript suites plus repository checks.
 - Run real sessions on desktop and iPhone with shell, Claude/Codex, Vim, htop,

@@ -7,6 +7,8 @@ class FakeTerminal implements TerminalLike {
   size = { cols: 120, rows: 36 };
   private dataHandler: ((data: string) => void) | null = null;
   private resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
+  autoFit = false;
+  presentationMode = 'fit';
 
   open(element: HTMLElement): void {
     this.openedIn = element;
@@ -34,7 +36,19 @@ class FakeTerminal implements TerminalLike {
 
   resize(cols: number, rows: number): void {
     this.size = { cols, rows };
+  }
+
+  emitResize(cols: number, rows: number): void {
+    this.size = { cols, rows };
     this.resizeHandler?.(this.size);
+  }
+
+  setAutoFit(active: boolean): void {
+    this.autoFit = active;
+  }
+
+  setPresentationMode(mode: 'fit' | 'actual'): void {
+    this.presentationMode = mode;
   }
 }
 
@@ -105,7 +119,7 @@ describe('createTerminalView', () => {
     const onResize = vi.fn();
 
     createTerminalView(element, () => terminal, { onResize });
-    terminal.resize(140, 40);
+    terminal.emitResize(140, 40);
 
     expect(onResize).not.toHaveBeenCalled();
   });
@@ -128,8 +142,40 @@ describe('createTerminalView', () => {
 
     const view = createTerminalView(element, () => terminal, { onResize });
     view.setActive(true);
-    terminal.resize(180, 50);
+    terminal.emitResize(180, 50);
 
     expect(onResize).toHaveBeenLastCalledWith({ cols: 180, rows: 50 });
+  });
+
+  it('uses the canonical PTY grid while spectating without changing ownership', () => {
+    const element = document.createElement('div');
+    const terminal = new FakeTerminal();
+    const onResize = vi.fn();
+
+    const view = createTerminalView(element, () => terminal, { onResize });
+    view.setCanonicalSize({ cols: 180, rows: 50 });
+
+    expect(terminal.size).toEqual({ cols: 180, rows: 50 });
+    expect(terminal.autoFit).toBe(false);
+    expect(onResize).not.toHaveBeenCalled();
+  });
+
+  it('returns the local viewport grid for a take-control request', () => {
+    const element = document.createElement('div');
+    const terminal = new FakeTerminal();
+
+    const view = createTerminalView(element, () => terminal);
+
+    expect(view.desiredSize()).toEqual({ cols: 120, rows: 36 });
+  });
+
+  it('switches between fit and actual-size spectator presentation', () => {
+    const element = document.createElement('div');
+    const terminal = new FakeTerminal();
+
+    const view = createTerminalView(element, () => terminal);
+    view.setPresentationMode('actual');
+
+    expect(terminal.presentationMode).toBe('actual');
   });
 });

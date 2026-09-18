@@ -4,7 +4,8 @@ import { createAuthMessage, type AuthMessage, type CreateAuthMessageOptions } fr
 import { createChatPanel } from './chat-panel';
 import { createControlPanel } from './control-panel';
 import { createSessionState } from './session-state';
-import { createTerminalView, type TerminalLike } from './terminal-view';
+import { createTerminalView, type TerminalLike, type TerminalPresentationMode, type TerminalSize } from './terminal-view';
+import type { SessionMode } from './protocol';
 import { RelayClient, type ConnectionState, type RelayClientOptions } from './ws-client';
 
 export interface ViewerClient {
@@ -14,7 +15,7 @@ export interface ViewerClient {
   sendChatMessage(text: string): void;
   sendInput(bytes: Uint8Array): void;
   sendResize(cols: number, rows: number): void;
-  sendTakeControl(): void;
+  sendTakeControl(cols: number, rows: number): void;
 }
 
 export type ViewerClientFactory = (options: RelayClientOptions) => ViewerClient;
@@ -37,10 +38,17 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const chatOverlay = root.querySelector<HTMLElement>('[data-panel="chat"]');
   const controlOverlay = root.querySelector<HTMLElement>('[data-panel="control"]');
   const statusBar = root.querySelector<HTMLElement>('[aria-label="Session status bar"]');
+  const typeButton = root.querySelector<HTMLButtonElement>('[aria-label="Focus terminal input"]');
+  const controlButton = root.querySelector<HTMLButtonElement>('[aria-label="Open session control"]');
 
-  if (!terminalCard || !terminalElement || !connectionStatus || !activeWriterStatus || !chatOverlay || !controlOverlay || !statusBar) {
+  if (!terminalCard || !terminalElement || !connectionStatus || !activeWriterStatus || !chatOverlay || !controlOverlay || !statusBar || !typeButton || !controlButton) {
     throw new Error('Viewer shell did not render required regions');
   }
+
+  const activeWriterStatusElement = activeWriterStatus;
+  const controlOverlayElement = controlOverlay;
+  const typeButtonElement = typeButton;
+  const controlButtonElement = controlButton;
 
   terminalCard.hidden = true;
   const terminal = createTerminalView(terminalElement, options.createTerminal, {
@@ -67,6 +75,8 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   const createClient = options.createClient ?? ((clientOptions) => new RelayClient(clientOptions));
   const sessionState = createSessionState(root);
   let localConnectionId: string | null = null;
+  let sessionMode: SessionMode = 'remote';
+  let focusWhenControlArrives = false;
   const chatPanel = createChatPanel(chatOverlay, {
     onSend: (text) => {
       client.sendChatMessage(text);
@@ -74,11 +84,59 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
   });
   const controlPanel = createControlPanel(controlOverlay, {
     localConnectionId,
-    onTakeControl: () => {
-      client.sendTakeControl();
+    onTakeControl: requestControl
+  });
+  wireStatusBar(root, {
+    onType: requestControl,
+    onPresentationMode: (mode) => {
+      terminal.setPresentationMode(mode);
     }
   });
-  wireStatusBar(root, terminal);
+
+  function requestControl(): void {
+    if (sessionMode === 'group') {
+      return;
+    }
+
+    const size = terminal.desiredSize();
+    focusWhenControlArrives = true;
+    activeWriterStatusElement.textContent = 'requesting control…';
+    client.sendTakeControl(size.cols, size.rows);
+  }
+
+  function applySessionMode(mode: SessionMode): void {
+    sessionMode = mode;
+    const isGroup = mode === 'group';
+    typeButtonElement.hidden = isGroup;
+    controlButtonElement.hidden = isGroup;
+
+    if (isGroup) {
+      controlOverlayElement.hidden = true;
+      activeWriterStatusElement.textContent = 'group · view only';
+    }
+  }
+
+  function applyControl(activeWriterId: string, activeWriterRole: 'host' | 'viewer', size: TerminalSize): void {
+    terminal.setCanonicalSize(size);
+    const isActiveWriter = sessionMode === 'remote' && activeWriterId === localConnectionId;
+    terminal.setActive(isActiveWriter);
+    controlPanel.updateControl({
+      active_writer_id: activeWriterId,
+      active_writer_role: activeWriterRole
+    });
+
+    if (sessionMode === 'group') {
+      activeWriterStatusElement.textContent = 'group · view only';
+      return;
+    }
+
+    activeWriterStatusElement.textContent = isActiveWriter ? 'you driving' : `${roleLabel(activeWriterRole)} driving`;
+
+    if (isActiveWriter && focusWhenControlArrives) {
+      focusWhenControlArrives = false;
+      terminal.focus();
+    }
+  }
   const gate = createAuthGate(root, {
     onSubmit: (submission) => {
       connectionStatus.textContent = 'Checking password…';
@@ -109,25 +167,43 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
       if (result.ok) {
         localConnectionId = result.connection_id ?? null;
         controlPanel.setLocalConnectionId(localConnectionId);
+        applySessionMode(result.mode ?? 'remote');
+
+        if (
+          result.cols !== undefined &&
+          result.rows !== undefined &&
+          result.active_writer_id !== undefined &&
+          result.active_writer_role !== undefined
+        ) {
+          applyControl(result.active_writer_id, result.active_writer_role, { cols: result.cols, rows: result.rows });
+        }
+
         gate.remove();
         terminalCard.hidden = false;
         connectionStatus.textContent = 'Connected';
         return;
       }
 
-      gate.showError(result.code === 'RATE_LIMITED' ? 'Too many attempts. Try again soon.' : 'Wrong password');
+      if (result.code === 'RATE_LIMITED') {
+        gate.showError('Too many attempts. Try again soon.');
+      } else if (result.code === 'SESSION_OCCUPIED') {
+        gate.showError('This remote session already has a viewer. Ask the host to use group mode for more viewers.');
+      } else {
+        gate.showError('Wrong password');
+      }
+      connectionStatus.textContent = 'Connected';
     },
     onChatMessage: (message) => {
       chatPanel.addMessage(message);
     },
     onControlChanged: (control) => {
-      controlPanel.updateControl(control);
-      const isActiveWriter = control.active_writer_id === localConnectionId;
-      terminal.setActive(isActiveWriter);
-      activeWriterStatus.textContent = isActiveWriter ? 'you driving' : `${roleLabel(control.active_writer_role)} driving`;
+      applyControl(control.active_writer_id, control.active_writer_role, { cols: control.cols, rows: control.rows });
     },
     onPresence: (presence) => {
       controlPanel.updatePresence(presence.connections);
+    },
+    onTerminalSize: (size) => {
+      terminal.setCanonicalSize({ cols: size.cols, rows: size.rows });
     },
     onKicked: () => {
       client.disconnect();
@@ -183,7 +259,12 @@ function statusTextFor(state: ConnectionState): string {
   return 'Waiting for session';
 }
 
-function wireStatusBar(root: HTMLElement, terminal: ReturnType<typeof createTerminalView>): void {
+interface StatusBarOptions {
+  onType(): void;
+  onPresentationMode(mode: TerminalPresentationMode): void;
+}
+
+function wireStatusBar(root: HTMLElement, options: StatusBarOptions): void {
   const overlays = [...root.querySelectorAll<HTMLElement>('.viewer-overlay')];
   const buttons = [...root.querySelectorAll<HTMLButtonElement>('.status-bar-button[data-panel]')];
 
@@ -218,7 +299,7 @@ function wireStatusBar(root: HTMLElement, terminal: ReturnType<typeof createTerm
     button.addEventListener('click', () => {
       if (button.dataset.panel === 'type') {
         showPanel(null);
-        terminal.focus();
+        options.onType();
         return;
       }
 
@@ -227,6 +308,11 @@ function wireStatusBar(root: HTMLElement, terminal: ReturnType<typeof createTerm
       showPanel(shouldClose ? null : panelName);
     });
   }
+
+  root.querySelector<HTMLSelectElement>('#terminal-view-mode')?.addEventListener('change', (event) => {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    options.onPresentationMode(value === 'actual' ? 'actual' : 'fit');
+  });
 }
 
 function isTextEntryTarget(target: HTMLElement): boolean {

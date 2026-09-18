@@ -99,7 +99,7 @@ func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestHostSeesChatFromViewer_RealRelay(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestFullAuthFlow_WrongPassword_Rejected(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}

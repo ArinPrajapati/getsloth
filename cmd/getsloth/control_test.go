@@ -47,7 +47,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f }, nil)
+		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f }, nil, nil)
 	}()
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
@@ -110,7 +110,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 		t.Fatalf("ReadJSON presence: %v", err)
 	}
 
-	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control")}); err != nil {
+	if err := viewer.WriteJSON(protocol.TakeControlMsg{Envelope: protocol.NewEnvelope("take_control"), Cols: 120, Rows: 36}); err != nil {
 		t.Fatalf("sending take_control: %v", err)
 	}
 	var controlChanged protocol.ControlChangedMsg

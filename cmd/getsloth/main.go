@@ -12,8 +12,25 @@ import (
 	"github.com/arinprajapati/getsloth/internal/protocol"
 )
 
+const usageText = `Usage:
+  getsloth [command [args...]]
+  getsloth --group [command [args...]]
+
+Modes:
+  Remote mode (default)  One remote viewer can watch and take control.
+  Group mode (--group)   Multiple viewers can view and chat; the host keeps control.
+`
+
 func main() {
-	command := commandFromArgs(os.Args)
+	if wantsHelp(os.Args) {
+		if _, err := io.WriteString(os.Stdout, usageText); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+
+	mode, command := launchFromArgs(os.Args)
+	hostCols, hostRows := terminalGridSize(os.Stdin)
 
 	relayURL := os.Getenv("GETSLOTH_RELAY_URL")
 	if relayURL == "" {
@@ -37,8 +54,14 @@ func main() {
 	stdout := io.Writer(os.Stdout)
 	var isActiveWriter *atomic.Bool
 	var onPTYReady func(*os.File)
+	var onHostSize func(cols, rows int)
 
-	ws, created, err := connectHost(relayURL)
+	ws, created, err := connectHost(relayURL, protocol.SessionConfigMsg{
+		Envelope: protocol.NewEnvelope("session_config"),
+		Mode:     mode,
+		HostCols: hostCols,
+		HostRows: hostRows,
+	})
 	if err != nil {
 		// Degrade to local-only rather than fail the whole command - a
 		// command wrapped by getsloth should still work exactly like
@@ -68,6 +91,13 @@ func main() {
 
 		ptmxCh := make(chan *os.File, 1)
 		onPTYReady = func(f *os.File) { ptmxCh <- f }
+		onHostSize = func(cols, rows int) {
+			_ = ws.WriteJSON(protocol.HostSizeMsg{
+				Envelope: protocol.NewEnvelope("host_size"),
+				Cols:     cols,
+				Rows:     rows,
+			})
+		}
 
 		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
@@ -123,7 +153,7 @@ func main() {
 		close(panicKill)
 	}()
 
-	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, panicKill)
+	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, onHostSize, panicKill)
 
 	if ws != nil {
 		// os.Exit below skips deferred functions, so cleanup happens
@@ -138,14 +168,32 @@ func main() {
 	os.Exit(exitCode)
 }
 
+func wantsHelp(args []string) bool {
+	return len(args) == 2 && (args[1] == "--help" || args[1] == "-h")
+}
+
 func commandFromArgs(args []string) []string {
-	if len(args) > 1 {
-		return args[1:]
+	_, command := launchFromArgs(args)
+	return command
+}
+
+func launchFromArgs(args []string) (string, []string) {
+	mode := protocol.SessionModeRemote
+	commandStart := 1
+	if len(args) > 1 && args[1] == "--group" {
+		mode = protocol.SessionModeGroup
+		commandStart = 2
+	}
+	if len(args) > commandStart && args[commandStart] == "--" {
+		commandStart++
+	}
+	if len(args) > commandStart {
+		return mode, args[commandStart:]
 	}
 
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
 	}
-	return []string{shell}
+	return mode, []string{shell}
 }

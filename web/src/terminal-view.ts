@@ -6,6 +6,10 @@ export interface TerminalLike {
   onData(handler: (data: string) => void): void;
   focus?(): void;
   fit?(): TerminalSize | null;
+  proposeSize?(): TerminalSize | null;
+  resize?(cols: number, rows: number): void;
+  setAutoFit?(active: boolean): void;
+  setPresentationMode?(mode: TerminalPresentationMode): void;
   onResize?(handler: (size: TerminalSize) => void): void;
 }
 
@@ -18,7 +22,12 @@ export interface TerminalView {
   focus(): void;
   write(bytes: Uint8Array): void;
   setActive(active: boolean): void;
+  setCanonicalSize(size: TerminalSize): void;
+  desiredSize(): TerminalSize;
+  setPresentationMode(mode: TerminalPresentationMode): void;
 }
+
+export type TerminalPresentationMode = 'fit' | 'actual';
 
 export interface TerminalViewOptions {
   onInput?(bytes: Uint8Array): void;
@@ -41,6 +50,7 @@ export function createTerminalView(
 
   let isActive = false;
   let lastSize: TerminalSize | null = null;
+  let applyingCanonicalSize = false;
 
   function rememberSize(size: TerminalSize | null): void {
     if (!size) {
@@ -54,10 +64,15 @@ export function createTerminalView(
   }
 
   terminal.onResize?.((size) => {
+    if (applyingCanonicalSize) {
+      lastSize = size;
+      return;
+    }
     rememberSize(size);
   });
   terminal.open(element);
-  rememberSize(terminal.fit?.() ?? null);
+  rememberSize(terminal.proposeSize?.() ?? terminal.fit?.() ?? null);
+  terminal.setAutoFit?.(false);
 
   terminal.onData((data) => {
     if (!isActive) {
@@ -76,8 +91,24 @@ export function createTerminalView(
     },
     setActive(active: boolean): void {
       isActive = active;
-      const fitSize = terminal.fit?.() ?? null;
-      rememberSize(fitSize ?? lastSize);
+      terminal.setAutoFit?.(active);
+
+      if (active) {
+        const fitSize = terminal.fit?.() ?? terminal.proposeSize?.() ?? null;
+        rememberSize(fitSize ?? lastSize);
+      }
+    },
+    setCanonicalSize(size: TerminalSize): void {
+      lastSize = size;
+      applyingCanonicalSize = true;
+      terminal.resize?.(size.cols, size.rows);
+      applyingCanonicalSize = false;
+    },
+    desiredSize(): TerminalSize {
+      return terminal.proposeSize?.() ?? terminal.fit?.() ?? lastSize ?? { cols: 80, rows: 24 };
+    },
+    setPresentationMode(mode: TerminalPresentationMode): void {
+      terminal.setPresentationMode?.(mode);
     }
   };
 }

@@ -14,13 +14,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func testSessionConfig() protocol.SessionConfigMsg {
+	return protocol.SessionConfigMsg{
+		Envelope: protocol.NewEnvelope("session_config"),
+		Mode:     protocol.SessionModeRemote,
+		HostCols: 120,
+		HostRows: 36,
+	}
+}
+
 func TestConnectHost_ReceivesSessionCreated(t *testing.T) {
 	srv := relay.NewServer()
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}
@@ -37,7 +46,7 @@ func TestRelayOutputWriter_ChunksLargeWritesAndReachesViewer(t *testing.T) {
 	defer ts.Close()
 	base := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	ws, created, err := connectHost(base)
+	ws, created, err := connectHost(base, testSessionConfig())
 	if err != nil {
 		t.Fatalf("connectHost: %v", err)
 	}

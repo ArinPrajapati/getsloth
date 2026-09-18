@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
@@ -43,7 +44,7 @@ import (
 // malicious actor started would otherwise survive killing just the
 // shell. The wrapped command is spawned in its own process group
 // (Setpgid) specifically to make this possible.
-func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic.Bool, onPTYReady func(*os.File), panicKill <-chan struct{}) int {
+func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic.Bool, onPTYReady func(*os.File), onHostSize func(cols, rows int), panicKill <-chan struct{}) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "getsloth: no command given")
 		return 2
@@ -58,7 +59,8 @@ func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic
 	// would try to setpgid() a session leader on itself, which POSIX
 	// disallows (EPERM) - confirmed by this exact failure when it was
 	// tried.
-	ptmx, err := pty.Start(cmd)
+	cols, rows := terminalGridSize(stdin)
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "getsloth:", err)
 		return 1
@@ -82,7 +84,7 @@ func run(args []string, stdin *os.File, stdout io.Writer, isActiveWriter *atomic
 	}
 
 	if term.IsTerminal(int(stdin.Fd())) {
-		stopResize := watchResize(stdin, ptmx)
+		stopResize := watchResize(stdin, ptmx, isActiveWriter, onHostSize)
 		defer stopResize()
 
 		if oldState, err := term.MakeRaw(int(stdin.Fd())); err == nil {
@@ -142,7 +144,7 @@ func (g *gatedWriter) Write(p []byte) (int, error) {
 // watchResize keeps ptmx's window size matching stdin's terminal size,
 // setting it once immediately and again on every SIGWINCH. The returned
 // func stops watching and must be called to avoid leaking the goroutine.
-func watchResize(stdin *os.File, ptmx *os.File) func() {
+func watchResize(stdin *os.File, ptmx *os.File, isActiveWriter *atomic.Bool, onHostSize func(cols, rows int)) func() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGWINCH)
 	sig <- syscall.SIGWINCH // trigger an initial resize
@@ -152,7 +154,13 @@ func watchResize(stdin *os.File, ptmx *os.File) func() {
 		for {
 			select {
 			case <-sig:
-				_ = pty.InheritSize(stdin, ptmx)
+				cols, rows := terminalGridSize(stdin)
+				if onHostSize != nil {
+					onHostSize(cols, rows)
+				}
+				if isActiveWriter == nil || isActiveWriter.Load() {
+					_ = pty.Setsize(ptmx, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+				}
 			case <-done:
 				return
 			}
@@ -163,4 +171,16 @@ func watchResize(stdin *os.File, ptmx *os.File) func() {
 		signal.Stop(sig)
 		close(done)
 	}
+}
+
+func terminalGridSize(input *os.File) (int, int) {
+	size, err := pty.GetsizeFull(input)
+	if err != nil || !validGridSize(int(size.Cols), int(size.Rows)) {
+		return protocol.DefaultCols, protocol.DefaultRows
+	}
+	return int(size.Cols), int(size.Rows)
+}
+
+func validGridSize(cols, rows int) bool {
+	return cols >= 2 && rows >= 2 && cols <= 1000 && rows <= 500
 }

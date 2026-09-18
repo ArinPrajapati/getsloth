@@ -39,7 +39,7 @@ func (c *safeConn) Close() error {
 
 // connectHost dials the relay's host endpoint and waits for the
 // session_created response.
-func connectHost(relayURL string) (*safeConn, protocol.SessionCreatedMsg, error) {
+func connectHost(relayURL string, config protocol.SessionConfigMsg) (*safeConn, protocol.SessionCreatedMsg, error) {
 	ws, _, err := websocket.DefaultDialer.Dial(relayURL+"/ws/host", nil)
 	if err != nil {
 		return nil, protocol.SessionCreatedMsg{}, err
@@ -48,6 +48,10 @@ func connectHost(relayURL string) (*safeConn, protocol.SessionCreatedMsg, error)
 	conn := &safeConn{ws: ws}
 	var created protocol.SessionCreatedMsg
 	if err := ws.ReadJSON(&created); err != nil {
+		_ = conn.Close()
+		return nil, protocol.SessionCreatedMsg{}, err
+	}
+	if err := conn.WriteJSON(config); err != nil {
 		_ = conn.Close()
 		return nil, protocol.SessionCreatedMsg{}, err
 	}

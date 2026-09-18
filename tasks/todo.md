@@ -41,10 +41,9 @@ aren't discoverable in-session yet.
 - [x] F3: Password gate UI
 - [x] F4: Take-control button + presence/control indicator
 - [x] F5: Chat panel
-- [x] F6: Mobile quick-action overlay (yes/no/continue + text) — logic/tests
-      by Pi, styling/layout completed by Claude. Real-phone manual check
-      (plan.md's explicit acceptance criterion) still outstanding — human
-      task, not agent-verifiable.
+- [x] F6: Mobile quick-action overlay — completed historically, then removed
+      from the live viewer by the approved terminal-first UX. Mobile now uses
+      normal xterm input after control is confirmed.
 - [x] F7: Kicked / session-ended states — by Claude
 - [ ] F8: Responsive + accessibility + performance pass
 
@@ -61,12 +60,14 @@ aren't discoverable in-session yet.
 Detailed product and implementation contract:
 `docs/session-modes-v0-plan.md`.
 
-- [ ] M0: Approve Remote mode / Group mode boundary and update protocol
-- [ ] M1: CLI mode selection + correct host geometry lifecycle
-- [ ] M2: Relay viewer-limit, read-only group policy, and canonical geometry
-- [ ] M3: Browser session-state/control protocol updates
-- [ ] M4: Canonical-grid terminal rendering with fit/pan mobile viewing
-- [ ] M5: Mode-aware status bar and intentional mobile typing flow
+- [x] M0: Approve Remote mode / Group mode boundary and update protocol
+- [x] M1: CLI mode selection + correct host geometry lifecycle
+- [x] M2: Relay viewer-limit, read-only group policy, and canonical geometry
+- [x] M3: Browser session-state/control protocol updates
+- [x] M4: Canonical-grid terminal rendering with fit/pan mobile viewing —
+      automated coverage complete; real-device/TUI matrix remains under M6
+- [x] M5: Mode-aware status bar and intentional mobile typing flow — console
+      focus polish remains part of the later responsive/a11y pass
 - [ ] M6: Multi-device shell/TUI verification
 
 **Checkpoint:** phone remote control is correct in Remote mode; Group mode is
