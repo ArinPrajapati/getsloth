@@ -31,6 +31,7 @@ textarea {
 
 .viewer-shell {
   height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
@@ -268,6 +269,7 @@ textarea {
 .session-status-card {
   width: min(100%, 40rem);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 3rem 1.25rem;
   display: grid;
@@ -293,6 +295,7 @@ textarea {
   .session-status-bar {
     min-height: 44px;
     grid-template-columns: 44px minmax(0, 1fr);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .status-bar-session {
@@ -337,7 +340,7 @@ textarea {
 
   .viewer-overlays {
     right: 0;
-    bottom: 2.75rem;
+    bottom: calc(2.75rem + env(safe-area-inset-bottom));
     width: 100%;
   }
 
