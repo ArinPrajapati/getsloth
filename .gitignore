@@ -19,3 +19,7 @@ worktree/
 
 # Playwright MCP tool artifacts (page snapshot cache)
 .playwright-mcp/
+
+# Private deploy notes — server IPs, SSH key paths, access details.
+# This repo is going open source; none of this belongs in it.
+deploy/server-notes.md
