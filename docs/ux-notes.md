@@ -363,3 +363,19 @@ Before finalizing the UX spec and starting implementation, resolve these gaps:
       human phone/keyboard/TUI checks are equally important for this product.
 
 Revisit this whole note when starting the actual UX pass.
+
+## v0 scope decision: Remote mode and Group mode
+
+The terminal-size investigation found that one process cannot render one shared
+PTY as independent responsive TUI layouts for desktop and phone. The v0 product
+boundary is therefore session-mode based, not device-detection based:
+
+- **Remote mode (default):** host plus one remote viewer. The active writer owns
+  canonical PTY geometry; remote Type requests control and size together. Host
+  geometry restores on reclaim or disconnect.
+- **Group mode:** host plus multiple viewers. Host always controls and owns PTY
+  geometry; viewers watch and chat. Narrow viewers use fit or pan/zoom. Remote
+  input/control is deferred.
+
+Full behavior, protocol changes, implementation phases, acceptance criteria,
+and deferred work are in `docs/session-modes-v0-plan.md`.

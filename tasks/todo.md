@@ -56,6 +56,22 @@ aren't discoverable in-session yet.
 
 **Checkpoint:** v0 works end-to-end on real devices, founder sign-off.
 
+## Phase 2.5: Session modes + terminal geometry
+
+Detailed product and implementation contract:
+`docs/session-modes-v0-plan.md`.
+
+- [ ] M0: Approve Remote mode / Group mode boundary and update protocol
+- [ ] M1: CLI mode selection + correct host geometry lifecycle
+- [ ] M2: Relay viewer-limit, read-only group policy, and canonical geometry
+- [ ] M3: Browser session-state/control protocol updates
+- [ ] M4: Canonical-grid terminal rendering with fit/pan mobile viewing
+- [ ] M5: Mode-aware status bar and intentional mobile typing flow
+- [ ] M6: Multi-device shell/TUI verification
+
+**Checkpoint:** phone remote control is correct in Remote mode; Group mode is
+stable host-sized viewing/chat without remote terminal control.
+
 ## Phase 3: UI/Design Pass
 Added after Phase 2 was scoped — explicitly sequenced to start only
 once Phase 2's checkpoint passes (founder's call: correctness first,
