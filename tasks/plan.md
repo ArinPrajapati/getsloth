@@ -675,18 +675,61 @@ a dedicated pass to actually design it, not a bug-fix task.
 
   **Estimated scope:** N/A — manual/content task
 
-- [ ] **Task L5: Go public**
+- [ ] **Task L5: Go public — staged, not big-bang**
 
-  **Description:** Push the repo to a public remote, publish the launch
-  post per the positioning decided in the ideation doc (solo/mobile/lazy
-  headline, collaboration as secondary).
+  **Description:** The founder wants a slow release, not a single
+  announcement post. Split "go public" into four gated stages so real
+  bugs surface in front of a handful of people before they surface in
+  front of everyone, and hype-building happens only after the thing has
+  survived contact with strangers. Each stage has its own go/no-go gate
+  — advance only when the gate passes, hold and fix otherwise.
+
+  **Stage A — Private dogfood (founder only, real deploy, not localhost)**
+  - Purpose: prove Task L3's actual acceptance criteria on the real
+    public relay, not the local dev chain this was verified against
+    during Phase 2.
+  - Gate to advance: `getsloth <command>` from a machine with no special
+    config reaches the public relay and produces a working link that
+    opens the Vercel-hosted viewer — the exact L3 acceptance criteria,
+    just run for real instead of against localhost.
+
+  **Stage B — Friends & family (5–10 trusted people, DM'd a link, no
+  public post)**
+  - Purpose: catch what only shows up with other people's networks,
+    terminals, and *other agents* — this integration pass tested
+    `bash`/`cat`, not `getsloth claude` or `getsloth aider` end to end.
+  - Gate to advance: no critical bugs from real usage by people who
+    aren't the founder; the core loop (link → password → watch/control →
+    kill switch) holds up outside a controlled test.
+
+  **Stage C — Soft public (repo public, README/LICENSE/demo live, no
+  amplified announcement)**
+  - Purpose: let the repo be discoverable and linkable without pushing
+    for volume yet — a quiet public state to absorb the first wave of
+    stranger traffic and any embarrassing edge cases before the loud
+    post.
+  - Gate to advance: repo public for ~48h with nothing critical surfaced.
+
+  **Stage D — Hype push (the actual launch post)**
+  - Purpose: this is where "create a bit of hype" happens — the launch
+    post per the positioning in `docs/ideas/getsloth.md`
+    (solo/mobile/lazy headline, collaboration secondary), cross-posted
+    wherever the founder wants reach, now backed by a demo that's
+    already survived Stages A–C instead of being the first time anyone
+    outside the team has touched it.
 
   **Acceptance criteria:**
-  - [ ] Repo is public, README/LICENSE visible, demo linked from the post
+  - [ ] Stage A passed (real deploy, not localhost)
+  - [ ] Stage B passed (friends & family, no critical bugs)
+  - [ ] Stage C passed (quiet public, 48h clean)
+  - [ ] Stage D: launch post published, demo linked
 
-  **Dependencies:** L1, L2, L3, L4
+  **Dependencies:** L1, L2, L3, L4 (Stage A specifically needs L3's relay
+  half, which is blocked on the founder providing relay server access —
+  see Open Questions)
 
-  **Estimated scope:** N/A — manual/publishing task
+  **Estimated scope:** N/A — manual/publishing task, staged over days not
+  hours
 
 ### Checkpoint: Shipped
 - [ ] Repo public, relay live, launch post published
