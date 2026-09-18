@@ -152,6 +152,26 @@ enough. xterm's fitted columns/rows must be sent back through the relay and
 applied to the host PTY. Otherwise full-screen TUIs like `nvim` appear trapped
 in a small top-left grid even though the CSS terminal area is fullscreen.
 
+tmux-specific UX note from browser testing: split panes render, but pane focus
+is easy to misunderstand. Keyboard input goes to tmux's active pane, not
+necessarily the pane the user visually clicked/tapped. Clicking/tapping a pane
+only changes focus when tmux mouse mode is enabled (`set -g mouse on`), and on
+mobile the usual tmux prefix/arrow workflow is awkward without helper keys.
+Acceptance testing must cover:
+
+- vertical and horizontal splits;
+- moving pane focus with keyboard shortcuts;
+- moving pane focus by mouse/touch when tmux mouse mode is enabled;
+- whether the active pane is visually clear enough in the browser;
+- mobile helper keys for tmux workflows (`Ctrl-b`, arrows, Esc, Tab).
+
+Shell default note from the same test: getsloth should not create or style a
+custom shell/prompt. If the host runs `getsloth` without an explicit command,
+it should start the user's configured default shell (`$SHELL`), matching tmux's
+principle of using the user's shell environment. If the host explicitly runs
+`getsloth sh`, then seeing a plain `sh-3.2$` prompt is correct because that is
+the command they asked for.
+
 Termux reference: mobile terminal UI can be dense and still usable when it is
 honest about being a terminal. The lesson is not to copy Termux branding or
 colors; it is that TUI output should occupy the screen as terminal output, with

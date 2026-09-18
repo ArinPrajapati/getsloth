@@ -13,10 +13,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: getsloth <command> [args...]")
-		os.Exit(2)
-	}
+	command := commandFromArgs(os.Args)
 
 	relayURL := os.Getenv("GETSLOTH_RELAY_URL")
 	if relayURL == "" {
@@ -126,7 +123,7 @@ func main() {
 		close(panicKill)
 	}()
 
-	exitCode := run(os.Args[1:], os.Stdin, stdout, isActiveWriter, onPTYReady, panicKill)
+	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, panicKill)
 
 	if ws != nil {
 		// os.Exit below skips deferred functions, so cleanup happens
@@ -139,4 +136,16 @@ func main() {
 	}
 
 	os.Exit(exitCode)
+}
+
+func commandFromArgs(args []string) []string {
+	if len(args) > 1 {
+		return args[1:]
+	}
+
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+	return []string{shell}
 }
