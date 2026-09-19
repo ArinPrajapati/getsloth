@@ -12,6 +12,13 @@ It also works for watching or handing off control between multiple
 people on a team, using the same mechanism — that's a secondary use
 case, not the primary one.
 
+<p align="center">
+  <img src="web/public/screenshots/desktop-busy.png" alt="Sloth viewer showing a live agent session on desktop" width="600" />
+</p>
+<p align="center">
+  <img src="web/public/screenshots/mobile-busy.png" alt="Sloth viewer showing a live agent session on a phone" width="240" />
+</p>
+
 ## Install
 
 ```
