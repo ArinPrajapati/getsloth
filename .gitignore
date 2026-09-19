@@ -29,3 +29,9 @@ deploy/server-notes.md
 
 # macOS Finder metadata.
 .DS_Store
+
+# Feedback collected from Twitter/LinkedIn/etc during the public launch —
+# private working notes, not part of the shipped project. See
+# feedback/README.md for the convention. README itself stays tracked.
+feedback/*
+!feedback/README.md
