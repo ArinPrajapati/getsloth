@@ -737,7 +737,9 @@ a dedicated pass to actually design it, not a bug-fix task.
         abuse this stage exists to catch, and Task I2's real-device
         evidence already covers the core loop a friends round would
         have re-tested.
-  - [ ] Stage C passed (quiet public, 48h clean)
+  - [ ] Stage C passed (quiet public, 48h clean) — repo made public
+        2026-09-19 (`gh repo edit --visibility public`); the 48h-clean
+        window starts now, gate not yet passed
   - [ ] Stage D: launch post published, demo linked
 
   **Dependencies:** L1, L2, L3, L4 (Stage A specifically needs L3's relay
