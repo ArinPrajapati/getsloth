@@ -112,6 +112,13 @@ func (s *hostSessionStatus) updateControl(msg protocol.ControlChangedMsg) {
 	s.mu.Unlock()
 }
 
+func (s *hostSessionStatus) noteChat(sender, text string) {
+	s.mu.Lock()
+	s.appendEventLocked("Chat from " + safeTerminalLabel(sender) + ": " + safeTerminalLabel(text))
+	s.renderTitleLocked()
+	s.mu.Unlock()
+}
+
 // noteKillSwitch records that the host triggered the kill switch, so the
 // control console's activity log reflects it instead of the event only
 // ever reaching the host's stderr.

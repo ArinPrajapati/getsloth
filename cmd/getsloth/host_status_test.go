@@ -99,6 +99,21 @@ func TestHostSessionStatus_RecordsControlChangesAsEvents(t *testing.T) {
 	}
 }
 
+func TestHostSessionStatus_NoteChatRecordsSanitizedActivity(t *testing.T) {
+	var out bytes.Buffer
+	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
+
+	status.noteChat("Alex\x1b]0;forged\a", "check\n\tthe\x1b[31mauth module")
+
+	events := status.snapshot().Events
+	if len(events) == 0 || events[0] != "Chat from Alex]0;forged: checkthe[31mauth module" {
+		t.Errorf("events = %#v", events)
+	}
+	if strings.Contains(out.String(), "\x1b]0;forged") || strings.Contains(out.String(), "\x1b[31m") {
+		t.Fatalf("chat injected terminal controls: %q", out.String())
+	}
+}
+
 func TestHostSessionStatus_NoteKillSwitchRecordsEvent(t *testing.T) {
 	var out bytes.Buffer
 	status := newHostSessionStatus(protocol.SessionModeRemote, &out)

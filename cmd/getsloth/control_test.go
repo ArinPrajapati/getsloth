@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"io"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -62,7 +61,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 	active := &atomic.Bool{}
 	active.Store(true)
 	ptmxCh := make(chan *os.File, 1)
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard, nil)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, nil)
 
 	// Run `cat` in a real PTY via run() itself - exercising the actual
 	// production PTY-spawn path, with onPTYReady feeding this same
