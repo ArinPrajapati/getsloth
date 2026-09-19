@@ -523,7 +523,16 @@ T0's message shapes) until B4/B5/B6 are ready for real integration.
 
   **Estimated scope:** Medium (unpredictable — protocol mismatch fixes)
 
-- [ ] **Task I2: Manual multi-device verification (human-only task)**
+- [x] **Task I2: Manual multi-device verification (human-only task)** —
+  core loop confirmed via real device (see `IMG_0783.MOV`, 2026-09-18):
+  a real phone on a stand, connected through the `sloth.arin.work`
+  Cloudflare tunnel to a local dev instance, live-mirroring the desktop
+  terminal with real typed input round-tripping in real time. Run
+  against the dev tunnel, not the `getsloth.dev`/`relay.getsloth.dev`
+  production domain deployed same day - functionally equivalent (real
+  device, real network path, real relay-mediated session), just not
+  the final domain. Founder's call to treat this as satisfying the
+  task rather than re-running the full checklist against production.
 
   **Description:** The actual "phone in bed" pitch, verified by a human,
   not an agent — start a session on a laptop, control it from a phone on a
@@ -719,8 +728,15 @@ a dedicated pass to actually design it, not a bug-fix task.
     outside the team has touched it.
 
   **Acceptance criteria:**
-  - [ ] Stage A passed (real deploy, not localhost)
-  - [ ] Stage B passed (friends & family, no critical bugs)
+  - [x] Stage A passed (real deploy, not localhost) — 2026-09-18, full
+        end-to-end test against the real `getsloth.dev`/`relay.getsloth.dev`
+        production stack: real crypto auth, real live output, real
+        take-control + input round-trip.
+  - [x] Stage B explicitly skipped — founder's call (2026-09-19): early
+        low-traffic domain, no real audience yet to draw the kind of
+        abuse this stage exists to catch, and Task I2's real-device
+        evidence already covers the core loop a friends round would
+        have re-tested.
   - [ ] Stage C passed (quiet public, 48h clean)
   - [ ] Stage D: launch post published, demo linked
 
