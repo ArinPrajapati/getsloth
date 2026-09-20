@@ -1,4 +1,5 @@
 import { encodeBase64Bytes } from './protocol';
+import { decompressP256PublicKey } from './ec-point';
 
 export interface AuthMessage {
   v: 1;
@@ -37,9 +38,10 @@ export async function createAuthMessage(options: CreateAuthMessageOptions): Prom
     true,
     ['deriveBits']
   );
+  const hostPublicKeyBytes = base64UrlToBytes(options.hostPublicKeyBase64Url);
   const hostPublicKey = await browserCrypto.subtle.importKey(
     'raw',
-    toArrayBuffer(base64UrlToBytes(options.hostPublicKeyBase64Url)),
+    toArrayBuffer(toUncompressedPublicKey(hostPublicKeyBytes)),
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
@@ -92,6 +94,20 @@ export async function createAuthMessage(options: CreateAuthMessageOptions): Prom
 
 export function rawPublicKeyToFragmentKey(bytes: Uint8Array): string {
   return encodeBase64Bytes(bytes).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
+// The plain share link carries the host's public key uncompressed (65
+// bytes, WebCrypto's native "raw" import format); the QR-only link (see
+// cmd/getsloth/shareurl.go's qrShareURL) carries it compressed (33 bytes)
+// to keep the QR smaller, since WebCrypto's importKey('raw', ...) does
+// not accept a compressed point directly. Length alone disambiguates the
+// two - SEC1 point encodings are self-describing by size and leading
+// byte (0x04 for uncompressed, 0x02/0x03 for compressed).
+function toUncompressedPublicKey(bytes: Uint8Array): Uint8Array {
+  if (bytes.length === 65) {
+    return bytes;
+  }
+  return decompressP256PublicKey(bytes);
 }
 
 function base64UrlToBytes(value: string): Uint8Array {

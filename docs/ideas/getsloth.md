@@ -220,6 +220,163 @@ Because the viewer is just a browser hitting a link, the exact same v0 build giv
 
 **Positioning decision:** don't lead marketing with "remote access from anywhere" — that's the exact pitch of Tailscale SSH, Teleport, Termius, Mosh, and tmate itself, a mature crowded space with zero differentiation for this product on that axis alone. Use it as a secondary use case and the low-friction onboarding path; the headline stays "watch and collaborate on a live AI agent session, together."
 
+## QR code alongside the link — decided
+
+Raised as: for the solo/mobile onboarding path, is a QR code a better handoff
+than typing/copying a URL onto a phone?
+
+**Decision: additive, not a replacement.** The link stays the primary
+access-control mechanism (it's what gets pasted into Slack, what the demo
+GIF needs to be clickable, and what a desktop-joining teammate uses) — a QR
+code can't substitute for it there. But for the specific "walk away from the
+laptop, open on your phone" moment that's already the v0 headline, scanning
+beats typing a URL on a phone keyboard.
+
+**Scope for v0:** when the CLI prints `Live at https://... — share this
+link`, also render a small ASCII QR code of that same URL directly in the
+terminal output, using a no-dependency (or minimal-dependency) Go ASCII QR
+library. No new server endpoint, no new state — it encodes the exact same
+link that's already generated, so it carries no extra security surface
+(same password-lock/link-is-access-control model applies unchanged). Also
+strengthens the demo GIF: scanning a terminal-rendered QR code with a phone
+reads better on camera than typing a URL.
+
+**Not in scope (superseded — see "QR bypasses the password prompt" below):**
+a QR code containing anything beyond the plain session URL was originally
+ruled out, on the reasoning that the password prompt already happens on
+page load so embedding it wasn't needed. Revisited once the QR was
+actually in front of the founder: it's real friction on the exact
+"phone in bed" moment being pitched to have to also type a 10-character
+password after scanning.
+
+## QR bypasses the password prompt — decided
+
+**Decision: the QR code's link carries the session password; the plain
+copy/paste link still doesn't.** Scanning the QR opens the session with no
+password prompt at all. This looked at first like a straightforward
+regression against the "relay never learns/embeds the password" boundary
+and the "a leaked link alone isn't sufficient to join" guarantee in
+`docs/protocol.md` — but on inspection it isn't, once the actual threat
+model for *this specific link* is stated precisely:
+
+- **Who can see the QR can already see the password.** They're printed by
+  the same `getsloth` process, one line apart, on the same terminal. The
+  password lock exists to stop someone who only has a *forwarded link*
+  (Slack, SMS, a screenshot missing the terminal) — not to stop someone
+  who is looking directly at the host's live terminal output. Encoding the
+  password into the QR reveals nothing that terminal access didn't already
+  reveal.
+- **The plain link stays password-free**, because that link's trust
+  boundary is different — it's built for pasting into Slack/SMS, which can
+  reach someone who never saw the terminal at all. Keeping the two link
+  forms separate (`shareURL` vs. `qrShareURL` in
+  `cmd/getsloth/shareurl.go`) preserves the original guarantee exactly
+  where it still matters.
+- **The relay-blind architecture is untouched.** The password still never
+  crosses the wire in plaintext to the relay in either case — the web
+  viewer still runs the same ECDH-encrypt-then-send-ciphertext flow per
+  `docs/protocol.md`'s Crypto wire format; the QR link just supplies the
+  password value locally in the browser (via the URL fragment, same
+  never-sent-to-any-server property already used for the auth public key)
+  instead of a human typing it.
+
+**Scope:** `qrShareURL` builds `.../s/<id>#k=<pubkey>&p=<password>`
+(URL-escaped) for the QR only. The web viewer reads `p` from the fragment
+and auto-submits it through the exact same `createAuthGate`/`sendAuth`
+path a manual submission uses — no parallel auth code path, so a wrong or
+stale password still surfaces through the normal error UI with the form
+intact for manual retry.
+
+**Done (was originally deferred, then flagged by code review):** the
+plaintext password no longer lingers in the address bar/history after
+being read. `web/src/viewer-app.ts`'s `stripPasswordFromAddressBar`
+rewrites the URL via `history.replaceState` to drop `p=` the moment it's
+read, leaving `k=` in place. The fragment still never crosses the
+network either way — this only closes the longer-lived local exposure
+(the device's own history, a synced account, a history-reading
+extension), not a network one.
+
+## QR size — compressed public key encoding — decided
+
+Adding the password to the QR link pushed a real terminal-legibility
+complaint: the QR (already large from the ~87-character auth public key
+alone) grew from a 49×49 module code to 53×53 once the password joined
+it — visibly too large on screen for the "quick phone scan" use case.
+
+**Two levers considered, one taken:** dropping the QR library's own
+white quiet-zone border (small, safe, ~16% smaller per side, tiny risk to
+scanners that specifically expect a light margin) vs. shrinking the
+public key encoding itself (the actual dominant contributor to size).
+Went with the key encoding, since it's the real fix rather than a
+cosmetic trim, on the explicit understanding it's a bigger, riskier
+change — it touches crypto code on both the Go host and the TypeScript
+web viewer.
+
+**Decision: the QR-only link's public key uses the compressed SEC1 point
+encoding (33 bytes) instead of the plain link's raw uncompressed encoding
+(65 bytes)** — same P-256 point, same curve, just a denser encoding.
+Result: 53×53 → 45×45 modules for a representative session URL (measured,
+not estimated). The plain copy/paste link is untouched — still
+uncompressed, still exactly what `docs/protocol.md`'s pinned wire format
+describes.
+
+**How the crypto risk was actually managed, not just asserted away:**
+neither side hand-derives elliptic-curve point (de)compression math from
+memorized field/curve constants, which would be exactly the kind of
+error-prone, hard-to-catch mistake that's dangerous in security code.
+- **Go** (`internal/hostauth/hostauth.go`'s new
+  `PublicKeyCompressedBase64URL`) delegates to `crypto/elliptic`'s
+  stdlib `MarshalCompressed` — already-audited code, not new math.
+- **TypeScript** (`web/src/ec-point.ts`) delegates to `@noble/curves`
+  (audited, widely used, added as a new dependency specifically for
+  this) instead of implementing the modular-square-root decompression
+  by hand.
+- **The two were verified to interoperate on real generated key
+  material**, not just independently unit-tested: a Go-generated
+  compressed key was decompressed by the TypeScript side and diffed
+  byte-for-byte against Go's own uncompressed output before any
+  production code was written, then locked in as a permanent
+  cross-language test vector in `web/src/ec-point.test.ts` and exercised
+  end-to-end (compress → fragment → `createAuthMessage` → decrypt) in
+  `web/src/auth.test.ts`.
+
+**Scope:** only `PublicKeyCompressedBase64URL`'s output goes into
+`qrShareURL`. `shareURL` (the plain link) still calls the existing
+`PublicKeyBase64URL`. `web/src/auth.ts` disambiguates by decoded byte
+length (33 vs. 65) — self-describing, no version flag needed.
+
+**Follow-up: the QR's built-in border was also revisited.** The founder
+separately asked to trim the QR library's default 4-module white quiet
+zone (the "thick white border" visible around the code) - the lever
+this decision originally passed over in favor of key compression. Tested
+before shipping, not assumed: a *fully* removed border (0-module margin)
+measurably broke scanning - OpenCV's `QRCodeDetector` failed to decode a
+zero-margin render even against a plain white background, let alone the
+terminal's own (often dark, wrong-colored for a quiet zone) background.
+A 1-module margin decoded reliably in the same test. **Decision: render a
+1-module light margin explicitly** (`cmd/getsloth/qrcode.go`'s
+`padQuietZone`, `quietZoneModules = 1`) - a quarter of the library's
+default 4, verified still to decode. Explicitly rendered (painted the
+same light color as real quiet-zone modules, via the same lipgloss path)
+rather than left to the terminal's ambient background, since the
+ambient-background approach is exactly what failed the decode test.
+
+**Further follow-up: pushed the margin from 2 modules to 1.** After the
+compressed-key change, the founder asked whether the QR could be smaller
+still. Checked what else was actually available: the go-qrcode library
+already does adaptive per-segment encoding (numeric/alphanumeric/byte
+chosen automatically), so there was no free win hiding there; session IDs
+are already compact (12 chars from 9 random bytes) and shrinking them
+further barely moves the module count while touching relay-wide
+rate-limiting code - not worth it. Presented the two real remaining
+levers plainly: the already-tested 1-module margin (small, safe, no
+further risk beyond what was already verified above), versus switching
+the whole payload to QR's denser alphanumeric encoding mode (~30% real
+size win, but requires changing the password alphabet and session ID
+format - both shared, security-relevant code, a materially bigger
+change). Founder chose the safe option only. Alphanumeric-mode encoding
+remains a real, larger lever if the QR size becomes a problem again.
+
 ## Naming — decided: `getsloth`
 
 Once the headline flipped to solo/mobile/lazy control of your own agent session (see above), naming was re-run to match that feeling, not just the mechanic.

@@ -75,6 +75,19 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     return null;
   }
 
+  // The QR-only link (cmd/getsloth/shareurl.go's qrShareURL) carries the
+  // session password in the fragment so scanning can auto-authenticate -
+  // see docs/ideas/getsloth.md's "QR bypasses the password prompt"
+  // decision. That's fine for the moment of scanning (whoever sees the QR
+  // already sees the password on the terminal), but leaving the plaintext
+  // password sitting in the browser's address bar and history afterward
+  // is a materially wider, longer-lived exposure than that. Strip it
+  // immediately after reading it, before anything else happens with it.
+  const passwordFromQR = passwordFromFragment(options.pageUrl);
+  if (passwordFromQR !== null) {
+    stripPasswordFromAddressBar(hostPublicKeyBase64Url);
+  }
+
   const createClient = options.createClient ?? ((clientOptions) => new RelayClient(clientOptions));
   const sessionState = createSessionState(root);
   let localConnectionId: string | null = null;
@@ -195,6 +208,7 @@ export function mountViewerApp(root: HTMLElement, options: MountViewerAppOptions
     }
   }
   const gate = createAuthGate(root, {
+    initialPassword: passwordFromQR ?? undefined,
     onSubmit: (submission) => {
       connectionStatus.textContent = 'Checking password…';
       void (options.createAuthMessage ?? createAuthMessage)({
@@ -296,8 +310,31 @@ function hostPublicKeyFromFragment(pageUrl: URL): string | null {
   return params.get('k');
 }
 
+// Only present when the page was opened from the terminal QR code, per
+// qrShareURL in cmd/getsloth/shareurl.go - the plain copy/paste share link
+// never carries this.
+function passwordFromFragment(pageUrl: URL): string | null {
+  const params = new URLSearchParams(pageUrl.hash.replace(/^#/, ''));
+  return params.get('p');
+}
+
 function sessionIdFromUrl(pageUrl: URL): string | null {
   return /^\/s\/([^/]+)\/?$/.exec(pageUrl.pathname)?.[1] ?? null;
+}
+
+// Rewrites the visible address bar to drop the `p=` password param,
+// leaving `k=` (and the rest of the URL) untouched, via replaceState so
+// it doesn't create a new back-button entry. The fragment was never sent
+// over the network either way (see docs/protocol.md), but leaving the
+// plaintext password sitting in the browser's own address bar and local
+// history for the rest of the session is unnecessary exposure once it's
+// already been read - guards against a later reader of that history
+// (another person with the device, a synced account, a history-reading
+// extension), not against the relay or network.
+function stripPasswordFromAddressBar(hostPublicKeyBase64Url: string): void {
+  const cleaned = new URL(window.location.href);
+  cleaned.hash = `k=${hostPublicKeyBase64Url}`;
+  window.history.replaceState(window.history.state as unknown, '', cleaned.toString());
 }
 
 function statusTextFor(state: ConnectionState): string {

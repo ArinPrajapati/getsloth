@@ -106,11 +106,56 @@ logs; here it's what makes "the relay cannot MITM the auth key" actually
 true instead of aspirational.
 
 The password (separate from the key) is still printed to the host's
-terminal separately, per FR2 — it does not go in the URL at all, in
+terminal separately, per FR2 — it does not go in this URL at all, in
 either the path or the fragment. The key and the password protect two
 different things: the key authenticates the channel so the relay can't
 read or tamper with the auth exchange; the password is what actually
-gates access, so a leaked link alone isn't sufficient to join.
+gates access, so a leaked (forwarded, screenshotted-without-the-terminal)
+copy of this link alone isn't sufficient to join.
+
+### QR-only link variant
+
+The terminal QR code (see `cmd/getsloth/qrcode.go`) encodes a *different*
+URL, built by `qrShareURL`, that adds the password to the fragment too:
+
+```
+https://getsloth.dev/s/<session_id>#k=<pubkey>&p=<password>
+```
+
+This is deliberately not the link above. Someone who can see the QR is,
+by construction, looking at the host's own terminal — which already
+prints the password in plain text right next to it — so embedding it
+here reveals nothing new. It only exists to skip retyping a 10-character
+password on a phone right after scanning; it is never what gets pasted
+into Slack or handed to a teammate (that's still the password-free link).
+The web viewer reads `p` from the fragment and auto-submits it through
+the same auth path a manual password entry uses (see
+[The relay-blind boundary](#the-relay-blind-boundary--how-its-actually-guaranteed)
+below — nothing about that guarantee changes based on where the password
+value came from).
+
+`<pubkey>` here is also encoded differently than in the plain link above:
+the *compressed* SEC1 point (33 bytes: a `0x02`/`0x03` parity prefix +
+the X coordinate) rather than the raw uncompressed point (65 bytes: `0x04
+|| X || Y`) the [Public key encoding](#crypto-wire-format) row otherwise
+pins. This is purely a QR-size optimization — the terminal QR code is the
+one place fewer bytes measurably shrinks the rendered code (adding the
+password already pushes the module count up; halving the key's
+contribution brings it back down) — and doesn't change what's
+cryptographically true: it's still the same P-256 point, on the same
+curve, used for the same ECDH per [Crypto wire format](#crypto-wire-format).
+
+Because WebCrypto's `importKey('raw', ...)` only accepts the uncompressed
+form, the web viewer decompresses this key back to 65 bytes before
+import (`web/src/ec-point.ts`, using `@noble/curves` — not hand-rolled
+curve math) whenever the fragment key it received is 33 bytes long; the
+plain link's 65-byte key is used as-is. The Go side produces the
+compressed form via `crypto/elliptic.MarshalCompressed` (also not
+hand-rolled). Both are verified to interoperate on real, independently
+generated key material, not just unit-tested in isolation — see
+`internal/hostauth/hostauth_test.go`'s
+`TestPublicKeyCompressedBase64URL_RoundTripsToSamePoint` and
+`web/src/auth.test.ts`'s compressed-key end-to-end case.
 
 ## The relay-blind boundary — how it's actually guaranteed
 

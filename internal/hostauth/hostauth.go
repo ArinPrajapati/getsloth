@@ -9,6 +9,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdh"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -16,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 
 	"golang.org/x/crypto/hkdf"
 )
@@ -47,6 +49,32 @@ func NewKeyPair() (*KeyPair, error) {
 // docs/protocol.md's Share link format).
 func (k *KeyPair) PublicKeyBase64URL() string {
 	return base64.RawURLEncoding.EncodeToString(k.priv.PublicKey().Bytes())
+}
+
+// PublicKeyCompressedBase64URL returns the SEC1 *compressed* public key
+// point (33 bytes: a 0x02/0x03 parity prefix + the X coordinate),
+// base64url-encoded (unpadded) - half the size of PublicKeyBase64URL's
+// raw uncompressed form. Used only for the terminal QR code's link (see
+// cmd/getsloth/shareurl.go's qrShareURL), where fewer bytes measurably
+// shrinks the QR's module count; the plain copy/paste link keeps using
+// the uncompressed form so its documented wire format in
+// docs/protocol.md is untouched.
+//
+// WebCrypto's `importKey('raw', ...)` for ECDH does not accept a
+// compressed point, so the browser must decompress it back to the
+// uncompressed 65-byte form first - see web/src/ec-point.ts, which
+// implements exactly the inverse of crypto/elliptic's
+// MarshalCompressed/UnmarshalCompressed used here. This isn't hand-rolled
+// curve math on either side: both ends delegate to an established
+// implementation (Go's stdlib here, the audited @noble/curves library in
+// the browser), verified to interoperate byte-for-byte as part of this
+// change.
+func (k *KeyPair) PublicKeyCompressedBase64URL() string {
+	uncompressed := k.priv.PublicKey().Bytes() // 0x04 || X(32) || Y(32)
+	x := new(big.Int).SetBytes(uncompressed[1:33])
+	y := new(big.Int).SetBytes(uncompressed[33:65])
+	compressed := elliptic.MarshalCompressed(elliptic.P256(), x, y)
+	return base64.RawURLEncoding.EncodeToString(compressed)
 }
 
 // VerifyPassword decrypts a viewer's auth attempt and reports whether it

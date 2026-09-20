@@ -36,4 +36,32 @@ describe('createAuthGate', () => {
     expect(root.querySelector('[role="alert"]')?.textContent).toBe('Wrong password');
     expect(root.querySelector('form')).not.toBeNull();
   });
+
+  it('auto-submits an initialPassword without requiring form interaction', () => {
+    const root = document.createElement('div');
+    const submissions: Array<{ password: string; displayName?: string }> = [];
+
+    createAuthGate(root, {
+      initialPassword: 'from-qr',
+      initialDisplayName: 'Phone',
+      onSubmit: (submission) => {
+        submissions.push(submission);
+      }
+    });
+
+    expect(submissions).toEqual([{ displayName: 'Phone', password: 'from-qr' }]);
+  });
+
+  it('still requires manual submission when no initialPassword is given', () => {
+    const root = document.createElement('div');
+    const submissions: unknown[] = [];
+
+    createAuthGate(root, {
+      onSubmit: (submission) => {
+        submissions.push(submission);
+      }
+    });
+
+    expect(submissions).toEqual([]);
+  });
 });

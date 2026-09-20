@@ -219,6 +219,16 @@ if [ "$use_named_tunnel" = true ]; then
   pids+=("$tunnel_pid")
   web_public_url="https://$public_host"
   wait_for_http "$tunnel_pid" "$web_public_url/" "$tunnel_log"
+  # The root check above only confirms the *web* ingress rule (the one
+  # with no `path:` restriction) is live - the separate `/ws/.*` ingress
+  # rule that routes to the relay can come up at a slightly different
+  # time, since they're independent rules within the same tunnel. Without
+  # this, getsloth could launch and try to connect before that second
+  # rule is actually routable, and fail with "bad handshake" even though
+  # the tunnel looks live. A plain GET here returns 400 (not a websocket
+  # upgrade) once the relay is reachable through it - wait_for_http's
+  # 2xx-4xx check already treats that as "ready."
+  wait_for_http "$tunnel_pid" "$web_public_url/ws/host" "$tunnel_log"
 else
   web_tunnel_log="$state_dir/web-tunnel.log"
   cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$web_port" >"$web_tunnel_log" 2>&1 &

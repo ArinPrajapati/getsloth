@@ -95,10 +95,31 @@ func main() {
 		// Printed separately, per docs/protocol.md's Share link format -
 		// the URL carries the auth public key (never a secret on its
 		// own), the password is a distinct line and is never part of
-		// the URL in either the path or the fragment.
+		// the URL in either the path or the fragment. This is the link
+		// meant for copy/paste sharing (Slack, SMS) - it stays
+		// password-free since it can reach someone who never saw the
+		// terminal.
 		inviteURL := shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL())
 		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", inviteURL)
 		fmt.Fprintf(os.Stderr, "getsloth: password: %s\n", password)
+		// The QR code encodes a *different* URL that also carries the
+		// password, so scanning it skips the manual password prompt -
+		// see qrShareURL's doc comment and docs/ideas/getsloth.md's "QR
+		// bypasses the password prompt" decision for why that's safe
+		// specifically for the QR (read off the host's own terminal)
+		// but not for the plain link above. It also uses the compressed
+		// public key encoding (half the bytes of the plain link's key)
+		// since the QR is the one place fewer bytes actually matters -
+		// see PublicKeyCompressedBase64URL's doc comment. A rendering
+		// failure here should never block the session itself, so it's
+		// reported and skipped rather than treated as fatal.
+		qrURL := qrShareURL(webBaseURL, created.SessionID, keys.PublicKeyCompressedBase64URL(), password)
+		if qr, err := renderQRCode(qrURL); err != nil {
+			fmt.Fprintln(os.Stderr, "getsloth: could not render QR code:", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "getsloth: scan to open on your phone:")
+			fmt.Fprint(os.Stderr, qr)
+		}
 
 		active := &atomic.Bool{}
 		active.Store(true) // host starts as the active writer

@@ -4,10 +4,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdh"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"io"
+	"math/big"
 	"testing"
 
 	"golang.org/x/crypto/hkdf"
@@ -77,6 +79,40 @@ func hostPubKeyBytes(t *testing.T, keys *KeyPair) []byte {
 		t.Fatalf("decoding host pubkey fragment encoding: %v", err)
 	}
 	return b
+}
+
+func TestPublicKeyCompressedBase64URL_RoundTripsToSamePoint(t *testing.T) {
+	keys, err := NewKeyPair()
+	if err != nil {
+		t.Fatalf("NewKeyPair: %v", err)
+	}
+
+	compressedBytes, err := base64.RawURLEncoding.DecodeString(keys.PublicKeyCompressedBase64URL())
+	if err != nil {
+		t.Fatalf("decoding compressed fragment encoding: %v", err)
+	}
+	if len(compressedBytes) != 33 {
+		t.Fatalf("compressed public key length = %d, want 33", len(compressedBytes))
+	}
+	if compressedBytes[0] != 0x02 && compressedBytes[0] != 0x03 {
+		t.Fatalf("compressed public key prefix = 0x%02x, want 0x02 or 0x03", compressedBytes[0])
+	}
+
+	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), compressedBytes)
+	if x == nil {
+		t.Fatal("UnmarshalCompressed rejected PublicKeyCompressedBase64URL's own output")
+	}
+	recompressed := elliptic.MarshalCompressed(elliptic.P256(), x, y)
+
+	uncompressedBytes := hostPubKeyBytes(t, keys)
+	wantX := new(big.Int).SetBytes(uncompressedBytes[1:33])
+	wantY := new(big.Int).SetBytes(uncompressedBytes[33:65])
+	if x.Cmp(wantX) != 0 || y.Cmp(wantY) != 0 {
+		t.Fatalf("decompressed point does not match PublicKeyBase64URL's own X/Y")
+	}
+	if string(recompressed) != string(compressedBytes) {
+		t.Fatal("recompressing the decompressed point did not reproduce the original compressed bytes")
+	}
 }
 
 func TestVerifyPassword_CorrectPassword(t *testing.T) {

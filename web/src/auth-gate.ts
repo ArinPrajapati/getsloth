@@ -10,6 +10,15 @@ export interface AuthGate {
 
 export interface AuthGateOptions {
   onSubmit(submission: AuthSubmission): void;
+  /**
+   * Pre-fills and immediately submits the password, used when it arrived
+   * via the QR code's `p=` fragment param instead of manual entry - see
+   * docs/ideas/getsloth.md's "QR bypasses the password prompt" decision.
+   * Manual entry stays the fallback: a wrong or stale password here still
+   * surfaces through the normal showError path, form intact.
+   */
+  initialPassword?: string;
+  initialDisplayName?: string;
 }
 
 export function createAuthGate(root: HTMLElement, options: AuthGateOptions): AuthGate {
@@ -60,8 +69,14 @@ export function createAuthGate(root: HTMLElement, options: AuthGateOptions): Aut
   panel.append(title, description, alert, form);
   root.prepend(panel);
 
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
+  if (options.initialDisplayName) {
+    nameInput.value = options.initialDisplayName;
+  }
+  if (options.initialPassword) {
+    passwordInput.value = options.initialPassword;
+  }
+
+  function trySubmit(): void {
     const password = passwordInput.value;
     const displayName = nameInput.value.trim();
 
@@ -72,7 +87,16 @@ export function createAuthGate(root: HTMLElement, options: AuthGateOptions): Aut
     }
 
     options.onSubmit({ password, ...(displayName ? { displayName } : {}) });
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    trySubmit();
   });
+
+  if (options.initialPassword) {
+    trySubmit();
+  }
 
   return {
     showError(message: string): void {

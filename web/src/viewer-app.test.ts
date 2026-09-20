@@ -492,4 +492,90 @@ describe('mountViewerApp', () => {
     expect(root.querySelector('[aria-label="Session status"]')?.textContent).not.toContain('Host ended your access');
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
+
+  it('auto-submits auth when the page URL carries a p= password from the QR code', async () => {
+    const root = document.createElement('div');
+    const sentAuth: AuthMessage[] = [];
+    const client: ViewerClient = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      sendAuth: (message) => {
+        sentAuth.push(message);
+      },
+      sendChatMessage: vi.fn(),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+      sendTakeControl: vi.fn()
+    };
+    const capturedCreateAuthMessage: Array<Parameters<NonNullable<Parameters<typeof mountViewerApp>[1]['createAuthMessage']>>[0]> = [];
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key&p=from-qr'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => new FakeTerminal(),
+      createClient: () => client,
+      createAuthMessage: (options) => {
+        capturedCreateAuthMessage.push(options);
+        return Promise.resolve({
+          v: 1,
+          type: 'auth',
+          viewer_pubkey_base64: 'pub',
+          ciphertext_base64: 'cipher'
+        });
+      }
+    });
+
+    await Promise.resolve();
+
+    expect(capturedCreateAuthMessage).toEqual([{ sessionId: 'abc123', hostPublicKeyBase64Url: 'public-key', password: 'from-qr' }]);
+    expect(sentAuth).toEqual([{ v: 1, type: 'auth', viewer_pubkey_base64: 'pub', ciphertext_base64: 'cipher' }]);
+  });
+
+  it('strips the p= password from the address bar after reading it from a QR link', () => {
+    const root = document.createElement('div');
+    const client: ViewerClient = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      sendAuth: vi.fn(),
+      sendChatMessage: vi.fn(),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+      sendTakeControl: vi.fn()
+    };
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key&p=from-qr'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => new FakeTerminal(),
+      createClient: () => client,
+      createAuthMessage: () => new Promise(() => undefined) // never resolves; only the address-bar cleanup is under test
+    });
+
+    expect(window.location.hash).toBe('#k=public-key');
+    expect(window.location.hash).not.toContain('p=from-qr');
+  });
+
+  it('leaves the address bar untouched when the page URL has no p= password', () => {
+    const root = document.createElement('div');
+    const client: ViewerClient = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      sendAuth: vi.fn(),
+      sendChatMessage: vi.fn(),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+      sendTakeControl: vi.fn()
+    };
+    const historySpy = vi.spyOn(window.history, 'replaceState');
+
+    mountViewerApp(root, {
+      pageUrl: new URL('https://getsloth.dev/s/abc123#k=public-key'),
+      relayBaseUrl: 'wss://relay.getsloth.dev',
+      createTerminal: () => new FakeTerminal(),
+      createClient: () => client
+    });
+
+    expect(historySpy).not.toHaveBeenCalled();
+    historySpy.mockRestore();
+  });
 });
