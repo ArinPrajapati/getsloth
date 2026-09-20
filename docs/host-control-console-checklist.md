@@ -123,7 +123,7 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 - [ ] Fall back gracefully if terminal launch fails.
 - [ ] Do not require tmux.
 - [ ] Do not break users already running inside tmux.
-- [ ] Later: Linux terminal launcher support.
+- [x] Linux terminal launcher support (`gnome-terminal`, `konsole`, `xterm`, and `x-terminal-emulator`; keyboard-shortcut fallback when unavailable).
 - [ ] Later: Windows Terminal support.
 
 ## Security checklist
