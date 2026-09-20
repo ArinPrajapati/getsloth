@@ -44,9 +44,13 @@ func main() {
 	mode, command := launchFromArgs(os.Args)
 	hostCols, hostRows := terminalGridSize(os.Stdin)
 
+	// Both default to the hosted production service, matching the
+	// README's zero-config promise ("one command on the host, no
+	// configure on the viewing device"). Self-hosters override both via
+	// env vars - see README's "Self-hosting the relay" section.
 	relayURL := os.Getenv("GETSLOTH_RELAY_URL")
 	if relayURL == "" {
-		relayURL = "ws://localhost:8080"
+		relayURL = "wss://relay.getsloth.dev"
 	}
 	webBaseURL := os.Getenv("GETSLOTH_WEB_URL")
 	if webBaseURL == "" {
