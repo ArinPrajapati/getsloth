@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"io"
 	"os"
 	"sync/atomic"
 
@@ -24,14 +22,12 @@ import (
 //   - input is a viewer's approved keystrokes, already confirmed by the
 //     relay to be from the current active writer - written to the PTY
 //     directly, no further gating needed here.
-//   - chat_message is printed to chatOut - without this, a viewer's
-//     "add context without taking control" message (the whole reason
-//     chat exists, per docs/ideas/getsloth.md) would silently vanish:
-//     the host sitting at their real terminal would never see it.
+//   - chat_message is recorded in the host control console's activity feed.
+//     It must not interrupt the terminal the host is using for the session.
 //
 // Blocks on ptmxCh until B2's run() has spawned the PTY (via
 // onPTYReady), then runs until the connection closes.
-func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File, chatOut io.Writer, status *hostSessionStatus) {
+func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File, status *hostSessionStatus) {
 	ptmx := <-ptmxCh
 	if status != nil {
 		defer status.setDisconnected()
@@ -115,15 +111,17 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 			if err := json.Unmarshal(raw, &msg); err != nil {
 				continue
 			}
-			sender := msg.SenderDisplayName
-			if sender == "" {
-				if msg.SenderRole == "host" {
-					sender = "you"
-				} else {
-					sender = "viewer"
+			if status != nil {
+				sender := msg.SenderDisplayName
+				if sender == "" {
+					if msg.SenderRole == "host" {
+						sender = "you"
+					} else {
+						sender = "viewer"
+					}
 				}
+				status.noteChat(sender, msg.Text)
 			}
-			_, _ = fmt.Fprintf(chatOut, "getsloth: [chat] %s: %s\n", sender, msg.Text)
 		}
 	}
 }

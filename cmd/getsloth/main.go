@@ -166,7 +166,7 @@ func main() {
 			onStatus:  status.print,
 		}
 
-		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, os.Stderr, status)
+		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, status)
 		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
 
 		// Signals remain as scriptable alternatives to the host's local

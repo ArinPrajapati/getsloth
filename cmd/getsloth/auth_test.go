@@ -111,7 +111,7 @@ func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 	}
 	const password = "correct-horse-battery-staple"
 	active, ptmxCh := dummyControlState()
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, io.Discard, nil)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, nil)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
@@ -138,13 +138,7 @@ func TestFullAuthFlow_RealRelay_RealHost_RealCrypto(t *testing.T) {
 	}
 }
 
-// TestHostSeesChatFromViewer_RealRelay proves the fix for a real gap
-// found in review: chat_message previously had no case in
-// runHostMessageLoop's dispatch at all, so a viewer's chat - the whole
-// point of the "add context without taking control" feature per
-// docs/ideas/getsloth.md - silently vanished before ever reaching
-// anything the host could see.
-func TestHostSeesChatFromViewer_RealRelay(t *testing.T) {
+func TestHostRoutesViewerChatToControlConsoleWithoutTerminalOutput(t *testing.T) {
 	srv := relay.NewServer()
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -162,8 +156,9 @@ func TestHostSeesChatFromViewer_RealRelay(t *testing.T) {
 	}
 	const password = "chat-test-password"
 	active, ptmxCh := dummyControlState()
-	var chatOut stringBuffer
-	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, &chatOut, nil)
+	var terminalOut stringBuffer
+	status := newHostSessionStatus(protocol.SessionModeRemote, &terminalOut)
+	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, status)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
@@ -198,16 +193,18 @@ func TestHostSeesChatFromViewer_RealRelay(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if strings.Contains(chatOut.String(), "check the auth module first") {
+		events := status.snapshot().Events
+		if len(events) > 0 && strings.Contains(events[0], "check the auth module first") {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !strings.Contains(chatOut.String(), "check the auth module first") {
-		t.Fatalf("host never saw the chat message; chatOut = %q", chatOut.String())
+	events := status.snapshot().Events
+	if len(events) == 0 || !strings.Contains(events[0], "Chat from Alex: check the auth module first") {
+		t.Fatalf("host control events = %#v, want viewer chat", events)
 	}
-	if !strings.Contains(chatOut.String(), "Alex") {
-		t.Errorf("host's view of the chat doesn't include the sender's display name; chatOut = %q", chatOut.String())
+	if strings.Contains(terminalOut.String(), "check the auth module first") {
+		t.Fatalf("chat leaked into host terminal output: %q", terminalOut.String())
 	}
 }
 
@@ -228,7 +225,7 @@ func TestFullAuthFlow_WrongPassword_Rejected(t *testing.T) {
 		t.Fatalf("NewKeyPair: %v", err)
 	}
 	active, ptmxCh := dummyControlState()
-	go runHostMessageLoop(ws, created.SessionID, "the-real-password", keys, active, ptmxCh, io.Discard, nil)
+	go runHostMessageLoop(ws, created.SessionID, "the-real-password", keys, active, ptmxCh, nil)
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)
 	if err != nil {
