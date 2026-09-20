@@ -127,7 +127,7 @@ git commit -m "feat: select Linux terminals for host control"
 **Interfaces:**
 - Produces `launchLinuxHostControlConsole(executablePath, socketPath string, lookPath func(string) (string, error), start func(string, []string) error) error`.
 - `launchHostControlConsole` calls this only when `runtime.GOOS == "linux"`.
-- The `start` implementation runs `exec.Command(name, args...).Start()` and arranges `Wait()` in a goroutine to reap the child process.
+- The Linux `start` implementation runs `exec.Command(name, args...).Start()` and arranges `Wait()` in a goroutine to reap the child process. The existing macOS AppleScript path continues to use `Run()` unchanged.
 
 - [ ] **Step 1: Write failing Linux fallback test**
 
@@ -170,9 +170,12 @@ func launchHostControlConsole(socketPath string) error {
     switch runtime.GOOS {
     case "darwin":
         name, args := hostControlLaunchArgs(executablePath, socketPath)
-        return runHostControlLauncher(name, args)
+        if err := exec.Command(name, args...).Run(); err != nil {
+            return fmt.Errorf("open Terminal host control console: %w", err)
+        }
+        return nil
     case "linux":
-        return launchLinuxHostControlConsole(executablePath, socketPath, exec.LookPath, startHostControlLauncher)
+        return launchLinuxHostControlConsole(executablePath, socketPath, exec.LookPath, startLinuxHostControlLauncher)
     default:
         return fmt.Errorf("automatic host control console is not supported on %s", runtime.GOOS)
     }
