@@ -56,16 +56,22 @@ sloth claude
 sloth
 ```
 
-It prints a share URL and a separate password:
+It prints a share URL, a separate password, and a QR code:
 
 ```
 sloth: live at https://getsloth.dev/s/<session-id>#k=<key>
 sloth: password: <random>
+sloth: scan to open on your phone:
+<QR code>
 ```
 
-Open the URL on your phone (or send it to whoever you want watching),
-enter the password, and you're in. The password is checked by your own
-machine, not by the relay server — the relay never sees it.
+Scan the QR code with your phone and you're straight in — no typing.
+That works because scanning it means you're already looking at the
+password printed right above it; if you send the plain URL to someone
+else instead (Slack, SMS, whoever you want watching), they'll still
+need to enter the password separately. Either way, the password is
+checked by your own machine, not by the relay server — the relay never
+sees it.
 
 **Remote mode** (default): one other viewer can connect and take
 control. Control can be handed back and forth, and the host can always

@@ -15,6 +15,17 @@ describe('mountLandingPage', () => {
     expect(root.textContent.toLowerCase()).not.toContain('testimonial');
   });
 
+  it('explains the QR code as the no-typing path, and the plain link as still requiring the password', () => {
+    const root = document.createElement('div');
+
+    mountLandingPage(root);
+
+    const howItWorks = root.querySelector('.landing-how')?.textContent ?? '';
+    expect(howItWorks.toLowerCase()).toContain('qr code');
+    expect(howItWorks.toLowerCase()).toContain('scan');
+    expect(howItWorks).toContain('password');
+  });
+
   it('clears any previously rendered content on remount', () => {
     const root = document.createElement('div');
     root.innerHTML = '<p>stale</p>';

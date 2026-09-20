@@ -56,13 +56,16 @@ export function mountLandingPage(root: HTMLElement): void {
     <h2>How it works</h2>
     <ol>
       <li>Run <code>sloth claude</code> (or any agent, or a plain shell) in front of whatever you want to control remotely.</li>
-      <li>It prints a share URL and a separate password.</li>
-      <li>Open the URL on your phone, enter the password, and you're in &mdash; watching or taking control instantly.</li>
+      <li>It prints a share URL, a password &mdash; and a QR code right there in your terminal.</li>
+      <li>Scan the QR code with your phone and you're straight in, no typing &mdash; watching or taking control instantly.</li>
     </ol>
     <p class="landing-note">
       The password is checked by your own machine, not by the relay server &mdash;
-      the relay never sees it. Works the same way for handing control back and
-      forth between a team, which is a secondary use case, not the headline one.
+      the relay never sees it. Scanning the QR skips typing it in only because
+      you're already looking at it on the same terminal; if you send the link
+      itself to someone else instead, they'll still need the password. Works
+      the same way for handing control back and forth between a team, which is
+      a secondary use case, not the headline one.
     </p>
   `;
 
