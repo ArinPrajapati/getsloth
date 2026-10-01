@@ -5,11 +5,13 @@ export type RelayMessage =
   | ErrorMsg
   | KickedMsg
   | OutputMsg
+  | PingMsg
   | PresenceMsg
   | SessionEndedMsg
   | TerminalSizeMsg;
 
 export type SessionMode = 'remote' | 'group';
+export type ViewerQuality = 'unknown' | 'good' | 'laggy' | 'stalled';
 
 export interface TerminalSizeMsg {
   v: 1;
@@ -22,6 +24,18 @@ export interface KickedMsg {
   v: 1;
   type: 'kicked';
   reason: 'kill_switch';
+}
+
+export interface PingMsg {
+  v: 1;
+  type: 'ping';
+  nonce: string;
+}
+
+export interface PongMsg {
+  v: 1;
+  type: 'pong';
+  nonce: string;
 }
 
 export interface SessionEndedMsg {
@@ -53,6 +67,8 @@ export interface PresenceConnection {
   role: 'host' | 'viewer';
   display_name?: string;
   is_active_writer: boolean;
+  rtt_ms?: number;
+  quality?: ViewerQuality;
 }
 
 export interface PresenceMsg {
@@ -104,6 +120,10 @@ export function parseRelayMessage(raw: string): RelayMessage | null {
 
   if (parsed.type === 'output' && typeof parsed.data_base64 === 'string') {
     return { v: 1, type: 'output', data_base64: parsed.data_base64 };
+  }
+
+  if (parsed.type === 'ping' && typeof parsed.nonce === 'string' && parsed.nonce.length > 0) {
+    return { v: 1, type: 'ping', nonce: parsed.nonce };
   }
 
   if (parsed.type === 'error' && isErrorCode(parsed.code) && typeof parsed.message === 'string') {
@@ -269,8 +289,18 @@ function isPresenceConnection(value: unknown): value is PresenceConnection {
     typeof value.id === 'string' &&
     isRole(value.role) &&
     (typeof value.display_name === 'string' || value.display_name === undefined) &&
-    typeof value.is_active_writer === 'boolean'
+    typeof value.is_active_writer === 'boolean' &&
+    (value.rtt_ms === undefined || isRttMilliseconds(value.rtt_ms)) &&
+    (value.quality === undefined || isViewerQuality(value.quality))
   );
+}
+
+function isRttMilliseconds(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isViewerQuality(value: unknown): value is ViewerQuality {
+  return value === 'unknown' || value === 'good' || value === 'laggy' || value === 'stalled';
 }
 
 function isRole(value: unknown): value is 'host' | 'viewer' {

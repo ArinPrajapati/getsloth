@@ -29,11 +29,14 @@ func (s *Server) broadcastPresence(session *Session) {
 	session.mu.Unlock()
 
 	for _, v := range viewers {
+		rttMs, quality := v.healthSnapshot()
 		connections = append(connections, protocol.PresenceConnectionInfo{
 			ID:             v.ID(),
 			Role:           "viewer",
 			DisplayName:    v.displayNameOrEmpty(),
 			IsActiveWriter: v.ID() == activeWriterID,
+			RTTMs:          rttMs,
+			Quality:        quality,
 		})
 	}
 

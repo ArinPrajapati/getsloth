@@ -34,6 +34,8 @@ func (s *Server) handleViewerMessage(session *Session, conn *Connection, remoteA
 			return
 		}
 		switch env.Type {
+		case "pong":
+			s.handlePong(session, conn, raw)
 		case "take_control":
 			var msg protocol.TakeControlMsg
 			if err := json.Unmarshal(raw, &msg); err != nil {

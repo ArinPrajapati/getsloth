@@ -7,6 +7,17 @@ describe('parseRelayMessage', () => {
     expect(message).toEqual({ v: 1, type: 'output', data_base64: 'aGVsbG8=' });
   });
 
+  it('accepts relay health pings with a nonce', () => {
+    const message = parseRelayMessage(JSON.stringify({ v: 1, type: 'ping', nonce: 'nonce-1' }));
+
+    expect(message).toEqual({ v: 1, type: 'ping', nonce: 'nonce-1' });
+  });
+
+  it('rejects health pings without a usable nonce', () => {
+    expect(parseRelayMessage(JSON.stringify({ v: 1, type: 'ping', nonce: '' }))).toBeNull();
+    expect(parseRelayMessage(JSON.stringify({ v: 1, type: 'ping' }))).toBeNull();
+  });
+
   it('ignores unknown relay message types for forward compatibility', () => {
     const message = parseRelayMessage(JSON.stringify({ v: 1, type: 'future_broadcast' }));
 
@@ -76,6 +87,41 @@ describe('parseRelayMessage', () => {
       cols: 160,
       rows: 44
     });
+  });
+
+  it('accepts relay-measured viewer health in presence messages', () => {
+    const message = parseRelayMessage(JSON.stringify({
+      v: 1,
+      type: 'presence',
+      connections: [
+        { id: 'host', role: 'host', is_active_writer: true },
+        { id: 'viewer-1', role: 'viewer', is_active_writer: false, rtt_ms: 42, quality: 'good' },
+        { id: 'viewer-2', role: 'viewer', is_active_writer: false, quality: 'stalled' }
+      ]
+    }));
+
+    expect(message).toEqual({
+      v: 1,
+      type: 'presence',
+      connections: [
+        { id: 'host', role: 'host', is_active_writer: true },
+        { id: 'viewer-1', role: 'viewer', is_active_writer: false, rtt_ms: 42, quality: 'good' },
+        { id: 'viewer-2', role: 'viewer', is_active_writer: false, quality: 'stalled' }
+      ]
+    });
+  });
+
+  it('rejects malformed viewer health fields', () => {
+    expect(parseRelayMessage(JSON.stringify({
+      v: 1,
+      type: 'presence',
+      connections: [{ id: 'viewer-1', role: 'viewer', is_active_writer: false, rtt_ms: -1, quality: 'good' }]
+    }))).toBeNull();
+    expect(parseRelayMessage(JSON.stringify({
+      v: 1,
+      type: 'presence',
+      connections: [{ id: 'viewer-1', role: 'viewer', is_active_writer: false, quality: 'offline' }]
+    }))).toBeNull();
   });
 
   it('accepts kicked messages', () => {
