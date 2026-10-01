@@ -22,10 +22,14 @@ type hostControlTUI struct {
 	width      int
 	height     int
 	showInvite bool
+	view       hostControlView
+	history    hostControlHistory
 }
 
 func newHostControlTUI(socketPath string, out io.Writer, snapshot hostControlSnapshot) hostControlTUI {
-	return hostControlTUI{socketPath: socketPath, out: out, snapshot: snapshot, width: 80}
+	history := hostControlHistory{}
+	history.record(snapshot)
+	return hostControlTUI{socketPath: socketPath, out: out, snapshot: snapshot, width: 80, history: history}
 }
 
 func (m hostControlTUI) Init() tea.Cmd {
@@ -40,6 +44,7 @@ func (m hostControlTUI) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case hostControlSnapshotMsg:
 		if msg.err == nil {
 			m.snapshot = msg.snapshot
+			m.history.record(msg.snapshot)
 		}
 		return m, tea.Tick(time.Second, func(time.Time) tea.Msg { return hostControlRefreshMsg{} })
 	case hostControlRefreshMsg:
@@ -47,6 +52,20 @@ func (m hostControlTUI) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 		if len(key) == 0 {
+			return m, nil
+		}
+		switch key {
+		case "tab":
+			m.view = (m.view + 1) % hostControlViewCount
+			return m, nil
+		case "g", "G":
+			m.view = hostControlViewGraph
+			return m, nil
+		case "u", "U":
+			m.view = hostControlViewUsers
+			return m, nil
+		case "j", "J":
+			m.view = hostControlViewJoin
 			return m, nil
 		}
 		return m.handleControlKey(key[0])
@@ -88,6 +107,9 @@ func (m hostControlTUI) handleControlKey(key byte) (tea.Model, tea.Cmd) {
 type hostControlRefreshMsg struct{}
 
 func (m hostControlTUI) View() string {
+	if m.height > 0 {
+		return renderHostControlConsole(m.snapshot, m.history, m.width, m.height, m.showInvite, m.view)
+	}
 	return renderHostControlDashboard(m.snapshot, m.width, m.showInvite)
 }
 

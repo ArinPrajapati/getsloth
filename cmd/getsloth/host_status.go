@@ -15,12 +15,20 @@ type hostControlViewer struct {
 	ID           string
 	Name         string
 	IsController bool
+	RTTMs        *int64
+	Quality      string
+}
+
+type hostControlViewerHealth struct {
+	RTTMs   *int64
+	Quality string
 }
 
 type hostControlSnapshot struct {
 	Live           bool
 	Mode           string
 	InviteURL      string
+	QRInviteURL    string
 	Password       string
 	ControllerID   string
 	ControllerRole string
@@ -32,8 +40,10 @@ type hostSessionStatus struct {
 	mu               sync.Mutex
 	mode             string
 	inviteURL        string
+	qrInviteURL      string
 	password         string
 	viewers          map[string]string
+	health           map[string]hostControlViewerHealth
 	events           []string
 	activeWriterID   string
 	activeWriterRole string
@@ -45,6 +55,7 @@ func newHostSessionStatus(mode string, out io.Writer) *hostSessionStatus {
 	status := &hostSessionStatus{
 		mode:             mode,
 		viewers:          make(map[string]string),
+		health:           make(map[string]hostControlViewerHealth),
 		activeWriterID:   "host",
 		activeWriterRole: "host",
 		live:             true,
@@ -61,10 +72,19 @@ func (s *hostSessionStatus) setInvite(inviteURL, password string) {
 	s.mu.Unlock()
 }
 
+// setQRInvite records the password-bearing link the QR code encodes, kept
+// apart from inviteURL because it must only ever be drawn as a QR.
+func (s *hostSessionStatus) setQRInvite(qrInviteURL string) {
+	s.mu.Lock()
+	s.qrInviteURL = qrInviteURL
+	s.mu.Unlock()
+}
+
 func (s *hostSessionStatus) updatePresence(msg protocol.PresenceMsg) {
 	s.mu.Lock()
 	previousViewers := s.viewers
 	s.viewers = make(map[string]string)
+	s.health = make(map[string]hostControlViewerHealth)
 	for _, connection := range msg.Connections {
 		if connection.Role == "viewer" {
 			name := connection.DisplayName
@@ -72,6 +92,16 @@ func (s *hostSessionStatus) updatePresence(msg protocol.PresenceMsg) {
 				name = "viewer"
 			}
 			s.viewers[connection.ID] = safeTerminalLabel(name)
+			quality := connection.Quality
+			if quality == "" {
+				quality = protocol.ViewerQualityUnknown
+			}
+			var rttMs *int64
+			if connection.RTTMs != nil {
+				value := *connection.RTTMs
+				rttMs = &value
+			}
+			s.health[connection.ID] = hostControlViewerHealth{RTTMs: rttMs, Quality: quality}
 		}
 		if connection.IsActiveWriter {
 			s.activeWriterID = connection.ID
@@ -142,10 +172,13 @@ func (s *hostSessionStatus) snapshot() hostControlSnapshot {
 
 	viewers := make([]hostControlViewer, 0, len(s.viewers))
 	for id, name := range s.viewers {
+		health := s.health[id]
 		viewers = append(viewers, hostControlViewer{
 			ID:           id,
 			Name:         name,
 			IsController: s.activeWriterRole == "viewer" && s.activeWriterID == id,
+			RTTMs:        health.RTTMs,
+			Quality:      health.Quality,
 		})
 	}
 	sort.Slice(viewers, func(i, j int) bool {
@@ -156,6 +189,7 @@ func (s *hostSessionStatus) snapshot() hostControlSnapshot {
 		Live:           s.live,
 		Mode:           s.mode,
 		InviteURL:      s.inviteURL,
+		QRInviteURL:    s.qrInviteURL,
 		Password:       s.password,
 		ControllerID:   s.activeWriterID,
 		ControllerRole: s.activeWriterRole,

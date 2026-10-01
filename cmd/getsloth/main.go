@@ -130,6 +130,7 @@ func main() {
 		isActiveWriter = active
 		status := newHostSessionStatus(mode, os.Stderr)
 		status.setInvite(inviteURL, password)
+		status.setQRInvite(qrURL)
 		controlServer, err = startHostControlServer(status.snapshot)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
