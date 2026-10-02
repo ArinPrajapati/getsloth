@@ -1,3 +1,5 @@
+//go:build !windows
+
 package main
 
 import (
@@ -5,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,26 +16,6 @@ import (
 	"github.com/arinprajapati/getsloth/internal/relay"
 	"github.com/gorilla/websocket"
 )
-
-// stringBuffer is a concurrency-safe append-only buffer - run()'s copy
-// goroutine writes to stdout while the test polls it, which a plain
-// bytes.Buffer doesn't support safely.
-type stringBuffer struct {
-	mu  sync.Mutex
-	buf strings.Builder
-}
-
-func (b *stringBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *stringBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
 
 // TestControlHandoff_ViewerInputReachesRealPTY is the end-to-end proof
 // this whole task exists for: a viewer takes control and types, and
@@ -60,7 +41,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 
 	active := &atomic.Bool{}
 	active.Store(true)
-	ptmxCh := make(chan *os.File, 1)
+	ptmxCh := make(chan ptyConn, 1)
 	go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, nil)
 
 	// Run `cat` in a real PTY via run() itself - exercising the actual
@@ -76,7 +57,7 @@ func TestControlHandoff_ViewerInputReachesRealPTY(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f *os.File) { ptmxCh <- f }, nil, nil, nil)
+		done <- run([]string{"cat"}, stdinR, &stdout, active, func(f ptyConn) { ptmxCh <- f }, nil, nil, nil)
 	}()
 
 	viewer, _, err := websocket.DefaultDialer.Dial(base+"/ws/viewer/"+created.SessionID, nil)

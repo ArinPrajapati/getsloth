@@ -8,6 +8,7 @@ import {
   type ControlChangedMsg,
   type KickedMsg,
   type PresenceMsg,
+  type PongMsg,
   type SessionEndedMsg,
   type TerminalSizeMsg
 } from './protocol';
@@ -131,6 +132,12 @@ export class RelayClient {
       const message = parseRelayMessage(event.data);
 
       if (!message) {
+        return;
+      }
+
+      if (message.type === 'ping') {
+        const pong: PongMsg = { v: 1, type: 'pong', nonce: message.nonce };
+        socket.send(JSON.stringify(pong));
         return;
       }
 

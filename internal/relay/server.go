@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/gorilla/websocket"
@@ -15,15 +16,19 @@ import (
 // auth-decision logic - see CONSTRAINTS.md's architecture rule and the
 // depguard entry in .golangci.yml that enforces it.
 type Server struct {
-	registry    *Registry
-	rateLimiter *rateLimiter
-	upgrader    websocket.Upgrader
+	registry       *Registry
+	rateLimiter    *rateLimiter
+	upgrader       websocket.Upgrader
+	healthInterval time.Duration
+	healthTimeout  time.Duration
 }
 
 func NewServer() *Server {
 	return &Server{
-		registry:    NewRegistry(),
-		rateLimiter: newRateLimiter(),
+		registry:       NewRegistry(),
+		rateLimiter:    newRateLimiter(),
+		healthInterval: healthPingInterval,
+		healthTimeout:  healthPingTimeout,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -66,6 +71,7 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 		s.registry.remove(session.ID)
 		return
 	}
+	go s.runViewerHealth(session)
 
 	// Block until the host disconnects, dispatching each message as it
 	// arrives.

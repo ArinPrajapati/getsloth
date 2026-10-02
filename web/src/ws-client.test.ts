@@ -67,6 +67,23 @@ describe('RelayClient', () => {
     expect(chunks).toEqual([[72, 105, 13, 10]]);
   });
 
+  it('answers relay health pings on the same socket with the nonce', () => {
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: (url) => new FakeSocket(url),
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined
+    });
+
+    client.connect();
+    FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'ping', nonce: 'nonce-1' }));
+
+    expect(FakeSocket.created[0]?.sent).toEqual([
+      JSON.stringify({ v: 1, type: 'pong', nonce: 'nonce-1' })
+    ]);
+  });
+
   it('surfaces relay error messages without throwing', () => {
     const errors: string[] = [];
     const client = new RelayClient({

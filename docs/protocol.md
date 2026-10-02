@@ -38,6 +38,10 @@ needs to deviate, this file changes first.
   canonical terminal geometry, atomic viewer takeover with dimensions,
   host-size restoration, and occupied/read-only errors. This prevents
   multiple differently sized browsers from fighting over one PTY grid.
+- v8: added relay-measured per-viewer health heartbeats. The relay sends an
+  application-level nonce ping, the viewer returns the nonce in a pong, and
+  the relay publishes the measured RTT and quality on `presence` without
+  involving the host or exposing any client clock data.
 
 ## Design rules
 
@@ -359,6 +363,32 @@ window, they rejoin as an authenticated participant like anyone else —
 they do **not** automatically regain control and must send `take_control`
 again if they want it back.
 
+## Connection health
+
+The relay measures each authenticated viewer connection independently. Every
+`HEALTH_PING_INTERVAL_MS` (5000ms), it checks for expired probes and sends a
+`ping` containing a fresh opaque nonce if no probe is outstanding. The viewer
+must immediately return a `pong` containing the
+same nonce. The relay measures elapsed monotonic time between sending `ping`
+and receiving the matching `pong`; neither side sends a wall-clock timestamp,
+and the viewer cannot report or invent its own RTT.
+
+The relay publishes the latest measurement in every `presence` message using
+that viewer's `rtt_ms` and `quality` fields. `rtt_ms` is the most recent
+whole-millisecond relay-side measurement. Quality is derived by the relay:
+
+- `good`: RTT is at most 150ms.
+- `laggy`: RTT is greater than 150ms and at most 500ms.
+- `stalled`: no matching pong arrives within `HEALTH_PING_TIMEOUT_MS`
+  (15000ms), or a measured RTT is greater than 500ms.
+- `unknown`: no measurement has completed yet.
+
+When a pong times out, the relay clears the old `rtt_ms` instead of presenting
+stale latency as current, sets quality to `stalled`, and broadcasts a fresh
+`presence` update. A later successful pong replaces the stale state with a new
+measurement. Health messages are observational only and never affect auth,
+control ownership, terminal input, or session teardown.
+
 ## Limits
 
 Hard caps, enforced by the relay; violation closes the connection with
@@ -440,6 +470,11 @@ interface TakeControlMsg extends Envelope {
 interface ChatMsg extends Envelope {
   type: "chat_message";
   text: string;
+}
+
+interface PongMsg extends Envelope {
+  type: "pong";
+  nonce: string; // copied unchanged from the relay's latest ping
 }
 ```
 
@@ -546,6 +581,11 @@ interface KickedMsg extends Envelope {
   type: "kicked";
   reason: "kill_switch";
 }
+
+interface PingMsg extends Envelope {
+  type: "ping";
+  nonce: string; // opaque relay-generated correlation value
+}
 ```
 
 ### Relay → viewers only
@@ -595,6 +635,8 @@ interface PresenceMsg extends Envelope {
     role: "host" | "viewer";
     display_name?: string; // absent for host; Frontend/host label their own entry "You" locally by comparing connection_id
     is_active_writer: boolean;
+    rtt_ms?: number; // latest relay-measured RTT; absent until a measurement completes or after timeout
+    quality?: "unknown" | "good" | "laggy" | "stalled";
   }>;
 }
 
@@ -637,6 +679,7 @@ interface ErrorMsg extends Envelope {
 | 10 | Kill switch disconnects viewers, session survives | `kill_switch`, `kicked` |
 | 11 | Session teardown on process/CLI exit | `session_ended`, `end_session` |
 | 12 | Knowing who's in the session | `presence` |
+| 13 | Per-viewer connection health | `ping`, `pong`, `presence{rtt_ms,quality}` |
 
 Reconnect resilience is covered by `resume` and the relay-issued token.
 
@@ -648,6 +691,8 @@ Reconnect resilience is covered by `resume` and the relay-issued token.
 | `RATE_LIMIT_COOLDOWN_MS` | 60000 |
 | `RECONNECT_WINDOW_MS` | 30000 |
 | `HOST_LOCK_WINDOW_MS` | 2000 |
+| `HEALTH_PING_INTERVAL_MS` | 5000 |
+| `HEALTH_PING_TIMEOUT_MS` | 15000 |
 
 See [Crypto wire format](#crypto-wire-format) for the pinned cryptographic
 parameters — not left as an open item, but still worth an early

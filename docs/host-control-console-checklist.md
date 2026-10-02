@@ -90,11 +90,11 @@ Purpose: make the console feel alive and useful without pretending to measure tr
 
 Use connection health metrics such as:
 
-- [ ] Latency/ping per viewer.
+- [x] Relay-measured latency/ping per viewer (nonce-correlated ping/pong; no client-reported timestamps).
 - [ ] Recent latency sparkline per viewer.
 - [ ] Stream/output throughput if available.
 - [ ] Backpressure or slow-write signal if available.
-- [ ] Quality label: `good`, `laggy`, `stalled`, or similar.
+- [x] Quality label: `unknown`, `good`, `laggy`, or `stalled`; timed-out measurements clear the displayed RTT.
 
 Example row:
 
@@ -124,7 +124,8 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 - [ ] Do not require tmux.
 - [ ] Do not break users already running inside tmux.
 - [x] Linux terminal launcher support (`gnome-terminal`, `konsole`, `xterm`, and `x-terminal-emulator`; keyboard-shortcut fallback when unavailable).
-- [ ] Later: Windows Terminal support.
+- [x] Windows Terminal launcher support (`wt.exe`/`wt` with `-w -1`; native new-console fallback when Windows Terminal is unavailable).
+- [x] Windows host runtime implemented: ConPTY via `golang.org/x/sys/windows` (replacing `creack/pty`, which returns `ErrUnsupported` on Windows), a Job Object that owns the whole process tree (terminated on panic kill, `KILL_ON_JOB_CLOSE` as a backstop), console-size polling in place of `SIGWINCH`, `COMSPEC` as the default shell, and a current-user-only ACL on the control socket directory. Verified by cross-compile, `go vet`, `staticcheck` and compiling the Windows tests only; **not yet run on real Windows** - the native CI job and issue #8 cover that. Windows has no `SIGUSR1`/`SIGUSR2`: reclaim and status use `Ctrl-]` and the control console; Ctrl-Break triggers panic kill.
 
 ## Security checklist
 
@@ -137,18 +138,26 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 
 ## Testing checklist
 
-- [ ] Unit tests for local control state updates.
-- [ ] Unit tests for reclaim action from control console.
-- [ ] Unit tests for kill-viewers action from control console.
-- [ ] Unit tests for invite info action.
+- [x] Unit tests for local control state updates.
+- [x] Tests for reclaim action from control console over the local channel.
+- [x] Tests for kill-viewers action from control console over the local channel.
+- [x] Tests for invite info retrieval over the local channel.
 - [ ] Unit tests for viewer health/sparkline calculation.
-- [ ] Integration test for main process starting local control endpoint.
-- [ ] Integration test for console connecting to endpoint.
-- [ ] Integration test that console exit does not end the host session.
-- [ ] Integration test that host session end invalidates console control.
+- [x] CLI startup integration test creating the local control endpoint alongside a real relay and PTY.
+- [x] Integration test for console connecting to endpoint.
+- [x] Integration test that console exit leaves the host control endpoint available and the session status live.
+- [x] Integration test that host session end invalidates console control, including PTY startup failure cleanup.
 - [ ] Manual test: `./scripts/dev-session.sh` opens main session and control console.
 - [ ] Manual test: getsloth invoked directly opens main session and control console.
 - [ ] Manual test: user already inside tmux does not get nested tmux/status-bar problems.
+
+`host_control_issue4_test.go` exercises real local sockets and console actions,
+including console disconnect and endpoint invalidation when the server closes.
+`main_integration_test.go` exercises CLI startup, authenticated viewing, control
+actions, signal handling, and teardown against a real local relay and PTY;
+it also verifies control-endpoint removal after command exit or startup failure.
+Relay tests cover RTT thresholds, nonce matching, and stale measurements; dashboard
+tests cover measured, stalled, and unmeasured viewers at narrow and wide widths.
 
 ## Implementation phases
 
@@ -182,8 +191,8 @@ bob    watching    180ms  ▁▁▂▁▃▂▁  laggy
 
 - [x] Add visible clickable buttons.
 - [x] Add mouse event support.
-- [ ] Add per-viewer latency/health graph — blocked on relay/protocol RTT plumbing that doesn't exist yet (no ping/pong, no per-connection timing anywhere in `internal/relay` or `internal/protocol`). Faking numbers here would misrepresent real network state; scope as its own task.
-- [ ] Add quality labels — same blocker as above.
+- [ ] Add per-viewer latency history/sparkline — relay RTT plumbing and current measurements are now implemented; historical samples and graph rendering remain future work.
+- [x] Add quality labels derived from actual relay RTT and probe timeouts.
 
 ## Open questions
 

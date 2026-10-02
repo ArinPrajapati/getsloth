@@ -72,6 +72,31 @@ func TestRenderHostControlDashboard_RevealsInviteWhenRequested(t *testing.T) {
 	}
 }
 
+func TestRenderHostControlDashboard_ShowsMeasuredAndStaleViewerHealth(t *testing.T) {
+	rtt := int64(42)
+	snapshot := hostControlSnapshot{
+		Live: true,
+		Viewers: []hostControlViewer{
+			{ID: "phone", Name: strings.Repeat("Phone", 10), RTTMs: &rtt, Quality: protocol.ViewerQualityGood},
+			{ID: "tablet", Name: "Tablet", Quality: protocol.ViewerQualityStalled},
+			{ID: "new", Name: "New viewer"},
+		},
+	}
+	for _, width := range []int{48, 72, 120} {
+		view := renderHostControlDashboard(snapshot, width, false)
+		for _, want := range []string{"relay RTT 42ms · good", "relay RTT — · stalled", "relay RTT — · unknown"} {
+			if !strings.Contains(view, want) {
+				t.Errorf("width %d dashboard missing health %q: %q", width, want, view)
+			}
+		}
+		for _, line := range strings.Split(view, "\n") {
+			if got := lipgloss.Width(line); got > width && !strings.Contains(line, "RECLAIM") {
+				t.Errorf("health dashboard line width = %d, want <= %d", got, width)
+			}
+		}
+	}
+}
+
 func TestHostControlKeybarRegions_AreOrderedAndNonOverlapping(t *testing.T) {
 	regions := hostControlKeybarRegions(false)
 	wantKeys := []byte{'r', 'k', 'i', 'c', 'q'}

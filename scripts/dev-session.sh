@@ -21,39 +21,10 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   exit 0
 fi
 
+# The Go CLI owns the interactive mode picker. Explicit mode flags and
+# non-interactive defaults are handled there too, so production and local
+# development use the same startup experience.
 session_args=("$@")
-if [ "${session_args[0]:-}" != "--remote" ] && [ "${session_args[0]:-}" != "--group" ]; then
-  if [ -t 0 ]; then
-    printf '%s\n' \
-      "Choose session mode:" \
-      "  1) Remote — one viewer can watch and take control" \
-      "  2) Group  — multiple viewers can watch and chat; host keeps control" >&2
-    printf 'Mode [1]: ' >&2
-    IFS= read -r mode_choice
-    case "$mode_choice" in
-      2|g|G|group|Group)
-        if [ "$#" -gt 0 ]; then
-          session_args=(--group "$@")
-        else
-          session_args=(--group)
-        fi
-        ;;
-      *)
-        if [ "$#" -gt 0 ]; then
-          session_args=(--remote "$@")
-        else
-          session_args=(--remote)
-        fi
-        ;;
-    esac
-  else
-    if [ "$#" -gt 0 ]; then
-      session_args=(--remote "$@")
-    else
-      session_args=(--remote)
-    fi
-  fi
-fi
 
 relay_port="${GETSLOTH_DEV_RELAY_PORT:-18080}"
 web_port="${GETSLOTH_DEV_WEB_PORT:-5174}"
@@ -243,6 +214,12 @@ echo "getsloth dev: phone-ready HTTPS tunnel is live" >&2
 echo "getsloth dev: starting session; press Ctrl-D or run 'exit' to stop everything" >&2
 echo >&2
 
-GETSLOTH_RELAY_URL="$relay_websocket_url" \
-GETSLOTH_WEB_URL="$web_public_url" \
-  "$state_dir/getsloth" "${session_args[@]}"
+if [ "${#session_args[@]}" -gt 0 ]; then
+  GETSLOTH_RELAY_URL="$relay_websocket_url" \
+  GETSLOTH_WEB_URL="$web_public_url" \
+    "$state_dir/getsloth" "${session_args[@]}"
+else
+  GETSLOTH_RELAY_URL="$relay_websocket_url" \
+  GETSLOTH_WEB_URL="$web_public_url" \
+    "$state_dir/getsloth"
+fi

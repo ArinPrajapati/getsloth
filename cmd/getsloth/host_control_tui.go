@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	controlAccentStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51"))
-	controlLiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
-	controlMutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	controlKeyStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51"))
+	controlAccentStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
+	controlLiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
+	controlMutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("29"))
+	controlKeyStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
 	controlDangerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
-	controlPanel       = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
+	controlPanel       = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("28")).Foreground(lipgloss.Color("40")).Padding(0, 1)
 )
 
 // hostControlButtonRegion is a clickable keybar button's key and the
@@ -129,6 +130,7 @@ func renderHostControlDashboard(snapshot hostControlSnapshot, width int, showInv
 			marker = controlLiveStyle.Render("●")
 		}
 		viewerLines = append(viewerLines, marker+" "+truncateDashboardText(viewer.Name, 28)+"  "+role)
+		viewerLines = append(viewerLines, controlMutedStyle.Render("    "+viewerHealthLabel(viewer)))
 	}
 
 	eventLines := []string{controlAccentStyle.Render("ACTIVITY")}
@@ -155,6 +157,20 @@ func renderHostControlDashboard(snapshot hostControlSnapshot, width int, showInv
 	}
 
 	return strings.Join([]string{header, keybar, "", body}, "\n")
+}
+
+func viewerHealthLabel(viewer hostControlViewer) string {
+	quality := viewer.Quality
+	switch quality {
+	case protocol.ViewerQualityGood, protocol.ViewerQualityLaggy, protocol.ViewerQualityStalled:
+	default:
+		quality = protocol.ViewerQualityUnknown
+	}
+	rtt := "—"
+	if viewer.RTTMs != nil {
+		rtt = fmt.Sprintf("%dms", *viewer.RTTMs)
+	}
+	return "relay RTT " + rtt + " · " + quality
 }
 
 func fitDashboardLines(lines []string, width int) string {

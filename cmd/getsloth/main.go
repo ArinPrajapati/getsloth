@@ -24,25 +24,56 @@ const usageText = `Usage:
 Modes:
   Remote mode (default)  One remote viewer can watch and take control.
   Group mode (--group)   Multiple viewers can view and chat; the host keeps control.
+
+  Interactive terminals show a mode picker when no mode flag is supplied.
+  Non-interactive terminals default to Remote mode.
 `
 
 func main() {
-	if args, ok := hostControlCommandArgs(os.Args); ok {
-		os.Exit(runHostControlConsole(args, os.Stdout))
+	os.Exit(runCLI(os.Args, os.Stdin, os.Stdout, os.Stderr))
+}
+
+func runCLI(args []string, stdin *os.File, stdout, stderr io.Writer) int {
+	return runCLIWithLauncher(args, stdin, stdout, stderr, launchHostControlConsole)
+}
+
+// Terminal-window launch is separate from session startup so headless callers
+// can retain the local control endpoint without opening a desktop window.
+func runCLIWithLauncher(args []string, stdin *os.File, stdout, stderr io.Writer, launchControl func(string) error) int {
+	if controlArgs, ok := hostControlCommandArgs(args); ok {
+		return runHostControlConsole(controlArgs, stdout)
 	}
-	if wantsHelp(os.Args) {
-		if _, err := io.WriteString(os.Stdout, usageText); err != nil {
-			os.Exit(1)
+	if wantsHelp(args) {
+		if _, err := io.WriteString(stdout, usageText); err != nil {
+			return 1
 		}
-		return
+		return 0
 	}
-	if wantsVersion(os.Args) {
-		_, _ = fmt.Fprintf(os.Stdout, "getsloth %s\n", version)
-		return
+	if wantsVersion(args) {
+		_, _ = fmt.Fprintf(stdout, "getsloth %s\n", version)
+		return 0
+	}
+	if stdin == nil {
+		stdin = os.Stdin
 	}
 
-	mode, command := launchFromArgs(os.Args)
-	hostCols, hostRows := terminalGridSize(os.Stdin)
+	mode, command := launchFromArgs(args)
+	var promptOutput *os.File
+	if file, ok := stderr.(*os.File); ok {
+		promptOutput = file
+	}
+	if shouldPromptForSessionMode(args, stdin, promptOutput) {
+		selectedMode, confirmed, err := chooseSessionMode(stdin, stderr)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "getsloth: could not run session mode picker:", err)
+			return 1
+		}
+		if !confirmed {
+			return 0
+		}
+		mode = selectedMode
+	}
+	hostCols, hostRows := terminalGridSize(stdin)
 
 	// Both default to the hosted production service, matching the
 	// README's zero-config promise ("one command on the host, no
@@ -62,17 +93,21 @@ func main() {
 		var err error
 		password, err = generatePassword(defaultPasswordLength)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "getsloth: could not generate a password:", err)
-			os.Exit(1)
+			_, _ = fmt.Fprintln(stderr, "getsloth: could not generate a password:", err)
+			return 1
 		}
 	}
 
-	stdout := io.Writer(os.Stdout)
+	localOutput := io.Writer(stdout)
 	var isActiveWriter *atomic.Bool
-	var onPTYReady func(*os.File)
+	var onPTYReady func(ptyConn)
 	var onHostSize func(cols, rows int)
 	var inputActions *hostInputActions
 	var controlServer *hostControlServer
+	var messageLoopDone chan struct{}
+	var softSignals chan os.Signal
+	var softStop chan struct{}
+	var softDone chan struct{}
 
 	ws, created, err := connectHost(relayURL, protocol.SessionConfigMsg{
 		Envelope: protocol.NewEnvelope("session_config"),
@@ -87,13 +122,14 @@ func main() {
 		// it right now. No relay connection means no shared control
 		// concept to gate against, so isActiveWriter/onPTYReady stay
 		// nil - run() treats that as "always active."
-		fmt.Fprintf(os.Stderr, "getsloth: could not reach relay at %s: %v\n", relayURL, err)
-		fmt.Fprintln(os.Stderr, "getsloth: continuing locally only - nobody can watch this session")
+		_, _ = fmt.Fprintf(stderr, "getsloth: could not reach relay at %s: %v\n", relayURL, err)
+		_, _ = fmt.Fprintln(stderr, "getsloth: continuing locally only - nobody can watch this session")
 	} else {
 		keys, err := hostauth.NewKeyPair()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "getsloth: could not generate session keys:", err)
-			os.Exit(1)
+			_, _ = fmt.Fprintln(stderr, "getsloth: could not generate session keys:", err)
+			_ = ws.Close()
+			return 1
 		}
 
 		// Printed separately, per docs/protocol.md's Share link format -
@@ -104,8 +140,8 @@ func main() {
 		// password-free since it can reach someone who never saw the
 		// terminal.
 		inviteURL := shareURL(webBaseURL, created.SessionID, keys.PublicKeyBase64URL())
-		fmt.Fprintf(os.Stderr, "getsloth: live at %s\n", inviteURL)
-		fmt.Fprintf(os.Stderr, "getsloth: password: %s\n", password)
+		_, _ = fmt.Fprintf(stderr, "getsloth: live at %s\n", inviteURL)
+		_, _ = fmt.Fprintf(stderr, "getsloth: password: %s\n", password)
 		// The QR code encodes a *different* URL that also carries the
 		// password, so scanning it skips the manual password prompt -
 		// see qrShareURL's doc comment and docs/ideas/getsloth.md's "QR
@@ -119,25 +155,33 @@ func main() {
 		// reported and skipped rather than treated as fatal.
 		qrURL := qrShareURL(webBaseURL, created.SessionID, keys.PublicKeyCompressedBase64URL(), password)
 		if qr, err := renderQRCode(qrURL); err != nil {
-			fmt.Fprintln(os.Stderr, "getsloth: could not render QR code:", err)
+			_, _ = fmt.Fprintln(stderr, "getsloth: could not render QR code:", err)
 		} else {
-			fmt.Fprintln(os.Stderr, "getsloth: scan to open on your phone:")
-			fmt.Fprint(os.Stderr, qr)
+			_, _ = fmt.Fprintln(stderr, "getsloth: scan to open on your phone:")
+			_, _ = fmt.Fprint(stderr, qr)
 		}
 
 		active := &atomic.Bool{}
 		active.Store(true) // host starts as the active writer
 		isActiveWriter = active
-		status := newHostSessionStatus(mode, os.Stderr)
+		status := newHostSessionStatus(mode, stderr)
 		status.setInvite(inviteURL, password)
+		status.setQRInvite(qrURL)
 		controlServer, err = startHostControlServer(status.snapshot)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
+			_, _ = fmt.Fprintln(stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
 		}
-		fmt.Fprintln(os.Stderr, "getsloth: host controls: Ctrl-] r reclaim · Ctrl-] i status")
+		_, _ = fmt.Fprintln(stderr, "getsloth: host controls: Ctrl-] r reclaim · Ctrl-] i status")
 
-		ptmxCh := make(chan *os.File, 1)
-		onPTYReady = func(f *os.File) { ptmxCh <- f }
+		ptmxCh := make(chan ptyConn, 1)
+		onPTYReady = func(f ptyConn) {
+			ptmxCh <- f
+			messageLoopDone = make(chan struct{})
+			go func() {
+				defer close(messageLoopDone)
+				runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, status)
+			}()
+		}
 		onHostSize = func(cols, rows int) {
 			_ = ws.WriteJSON(protocol.HostSizeMsg{
 				Envelope: protocol.NewEnvelope("host_size"),
@@ -152,88 +196,101 @@ func main() {
 		killViewers := func() error {
 			err := ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
 			if err == nil {
-				fmt.Fprintln(os.Stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
+				_, _ = fmt.Fprintln(stderr, "getsloth: kill switch triggered - all viewers disconnected, session still live")
 				status.noteKillSwitch()
 			}
 			return err
 		}
 		if controlServer != nil {
 			controlServer.setActions(reclaim, killViewers)
-			if err := launchHostControlConsole(controlServer.socketPath); err != nil {
-				fmt.Fprintln(os.Stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
+			if launchControl == nil {
+				launchControl = launchHostControlConsole
+			}
+			if err := launchControl(controlServer.socketPath); err != nil {
+				_, _ = fmt.Fprintln(stderr, "getsloth: host control console unavailable; use Ctrl-] i for status and Ctrl-] r to reclaim")
 			} else {
-				fmt.Fprintln(os.Stderr, "getsloth: host control console opened in a separate Terminal window")
+				_, _ = fmt.Fprintln(stderr, "getsloth: host control console opened in a separate Terminal window")
 			}
 		}
 		inputActions = &hostInputActions{
 			onReclaim: func() { _ = reclaim() },
 			onStatus:  status.print,
 		}
-
-		go runHostMessageLoop(ws, created.SessionID, password, keys, active, ptmxCh, status)
-		stdout = io.MultiWriter(os.Stdout, &relayOutputWriter{ws: ws})
+		localOutput = io.MultiWriter(stdout, &relayOutputWriter{ws: ws})
 
 		// Signals remain as scriptable alternatives to the host's local
 		// Ctrl-] command prefix: USR2 reclaims control and USR1 triggers
 		// the soft kill switch without ending the wrapped process.
-		signals := make(chan os.Signal, 2)
-		signal.Notify(signals, syscall.SIGUSR1, syscall.SIGUSR2)
+		softSignals = make(chan os.Signal, 2)
+		softStop = make(chan struct{})
+		softDone = make(chan struct{})
+		notifySoftSignals(softSignals)
 		go func() {
-			for sig := range signals {
-				switch sig {
-				case syscall.SIGUSR2:
-					_ = reclaim()
-				case syscall.SIGUSR1:
-					_ = killViewers()
+			defer close(softDone)
+			for {
+				select {
+				case sig := <-softSignals:
+					switch softSignalAction(sig) {
+					case softReclaim:
+						_ = reclaim()
+					case softKillViewers:
+						_ = killViewers()
+					}
+				case <-softStop:
+					return
 				}
 			}
 		}()
 	}
 
-	// Panic kill: a break-glass failsafe for "someone else may have
-	// control of my machine right now," distinct from the soft kill
-	// switch above. Available regardless of whether a relay connection
-	// exists - protecting the host's machine doesn't depend on
-	// networking. Triggered by SIGINT or SIGTERM (`kill <pid>` or
-	// `kill -INT <pid>`), and does two things in order: first cuts off
-	// the sloth session itself (best-effort - the network may be part
-	// of the problem, so this must never block the second, guaranteed
-	// step), then kills the wrapped command and every process it
-	// spawned during the session, not just the top-level one. The
-	// process itself then exits entirely - this is not something to
-	// casually continue past, a fresh session is started manually
-	// afterward if needed.
+	// Signal subscriptions belong to one session; returning must not leave
+	// handlers that could target a later session's process group.
 	panicKill := make(chan struct{})
 	panicSignals := make(chan os.Signal, 1)
+	panicStop := make(chan struct{})
+	panicDone := make(chan struct{})
 	signal.Notify(panicSignals, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-panicSignals
-		fmt.Fprintln(os.Stderr, "getsloth: PANIC KILL triggered - cutting off remote access, then terminating all session processes")
+		defer close(panicDone)
+		select {
+		case <-panicSignals:
+			_, _ = fmt.Fprintln(stderr, "getsloth: PANIC KILL triggered - cutting off remote access, then terminating all session processes")
+			if ws != nil {
+				_ = ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
+				_ = ws.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")})
+				_ = ws.Close()
+			}
+			close(panicKill)
+		case <-panicStop:
+			return
+		}
+	}()
+
+	cleanup := func() {
+		if controlServer != nil {
+			_ = controlServer.Close()
+		}
+		if softSignals != nil {
+			signal.Stop(softSignals)
+			close(softStop)
+			<-softDone
+		}
+		signal.Stop(panicSignals)
+		close(panicStop)
+		<-panicDone
 		if ws != nil {
-			_ = ws.WriteJSON(protocol.KillSwitchMsg{Envelope: protocol.NewEnvelope("kill_switch")})
+			// Tell the relay this is a clean end before closing. If panic
+			// kill already did this, the write is harmlessly rejected.
 			_ = ws.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")})
 			_ = ws.Close()
 		}
-		close(panicKill)
-	}()
-
-	exitCode := run(command, os.Stdin, stdout, isActiveWriter, onPTYReady, onHostSize, inputActions, panicKill)
-
-	if controlServer != nil {
-		_ = controlServer.Close()
+		if messageLoopDone != nil {
+			<-messageLoopDone
+		}
 	}
+	defer cleanup()
 
-	if ws != nil {
-		// os.Exit below skips deferred functions, so cleanup happens
-		// here explicitly: tell the relay this is a clean end (not an
-		// abrupt drop, which would otherwise be indistinguishable) per
-		// docs/protocol.md's SessionEndedMsg reasons, then close. A
-		// no-op if the panic-kill path above already did this.
-		_ = ws.WriteJSON(protocol.EndSessionMsg{Envelope: protocol.NewEnvelope("end_session")})
-		_ = ws.Close()
-	}
-
-	os.Exit(exitCode)
+	return run(command, stdin, localOutput, isActiveWriter, onPTYReady, onHostSize, inputActions, panicKill)
 }
 
 func hostControlCommandArgs(args []string) ([]string, bool) {
@@ -272,9 +329,5 @@ func launchFromArgs(args []string) (string, []string) {
 		return mode, args[commandStart:]
 	}
 
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-	return mode, []string{shell}
+	return mode, []string{defaultShell()}
 }

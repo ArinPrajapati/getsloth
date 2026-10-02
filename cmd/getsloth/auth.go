@@ -3,12 +3,10 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"os"
 	"sync/atomic"
 
 	"github.com/arinprajapati/getsloth/internal/hostauth"
 	"github.com/arinprajapati/getsloth/internal/protocol"
-	"github.com/creack/pty"
 )
 
 // runHostMessageLoop reads every message the relay sends to the host
@@ -27,7 +25,7 @@ import (
 //
 // Blocks on ptmxCh until B2's run() has spawned the PTY (via
 // onPTYReady), then runs until the connection closes.
-func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan *os.File, status *hostSessionStatus) {
+func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth.KeyPair, isActiveWriter *atomic.Bool, ptmxCh <-chan ptyConn, status *hostSessionStatus) {
 	ptmx := <-ptmxCh
 	if status != nil {
 		defer status.setDisconnected()
@@ -63,10 +61,7 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 				continue
 			}
 			if validGridSize(msg.Cols, msg.Rows) {
-				_ = pty.Setsize(ptmx, &pty.Winsize{
-					Rows: uint16(msg.Rows),
-					Cols: uint16(msg.Cols),
-				})
+				_ = ptmx.resize(msg.Cols, msg.Rows)
 			}
 			isActiveWriter.Store(msg.ActiveWriterRole == "host")
 			if status != nil {
@@ -101,10 +96,7 @@ func runHostMessageLoop(ws *safeConn, sessionID, password string, keys *hostauth
 			if msg.Cols < 2 || msg.Rows < 2 || msg.Cols > 1000 || msg.Rows > 500 {
 				continue
 			}
-			_ = pty.Setsize(ptmx, &pty.Winsize{
-				Rows: uint16(msg.Rows),
-				Cols: uint16(msg.Cols),
-			})
+			_ = ptmx.resize(msg.Cols, msg.Rows)
 
 		case "chat_message":
 			var msg protocol.ChatBroadcastMsg

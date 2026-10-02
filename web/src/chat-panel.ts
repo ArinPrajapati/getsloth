@@ -12,16 +12,21 @@ export function createChatPanel(root: HTMLElement, options: ChatPanelOptions): C
   const panel = document.createElement('section');
   panel.className = 'chat-card';
   panel.setAttribute('aria-label', 'Session chat');
+  panel.setAttribute('aria-labelledby', 'chat-panel-title');
 
   const title = document.createElement('h2');
+  title.id = 'chat-panel-title';
   title.textContent = 'Chat';
 
   const messages = document.createElement('ol');
   messages.className = 'chat-messages';
   messages.setAttribute('aria-label', 'Chat messages');
+  messages.setAttribute('aria-live', 'polite');
+  messages.setAttribute('aria-relevant', 'additions');
 
   const form = document.createElement('form');
   form.className = 'chat-form';
+  form.setAttribute('aria-label', 'Send a chat message');
 
   const label = document.createElement('label');
   label.htmlFor = 'chat-message';
@@ -30,7 +35,9 @@ export function createChatPanel(root: HTMLElement, options: ChatPanelOptions): C
   const input = document.createElement('input');
   input.id = 'chat-message';
   input.name = 'chat-message';
+  input.type = 'text';
   input.autocomplete = 'off';
+  input.placeholder = 'Send a note';
 
   const submit = document.createElement('button');
   submit.type = 'submit';

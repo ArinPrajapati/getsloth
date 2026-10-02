@@ -28,6 +28,8 @@ type Session struct {
 	mu               sync.Mutex
 	host             *Connection
 	viewers          map[string]*Connection
+	done             chan struct{}
+	doneOnce         sync.Once
 	closed           bool
 	mode             string
 	cols             int
@@ -134,6 +136,7 @@ func (s *Session) teardown(reason string) {
 	}
 	s.viewers = map[string]*Connection{}
 	s.closed = true
+	s.doneOnce.Do(func() { close(s.done) })
 	s.mu.Unlock()
 
 	for _, c := range viewers {
@@ -208,6 +211,7 @@ func (r *Registry) Create() (*Session, error) {
 	s := &Session{
 		ID:               id,
 		viewers:          map[string]*Connection{},
+		done:             make(chan struct{}),
 		pendingAuth:      map[string]pendingAuth{},
 		tokens:           map[string]tokenRecord{},
 		mode:             protocol.SessionModeRemote,

@@ -1,3 +1,5 @@
+//go:build !windows
+
 package main
 
 import (
@@ -10,24 +12,6 @@ import (
 	"testing"
 	"time"
 )
-
-// nonTerminalStdin returns an *os.File that is definitely not a terminal
-// (a pipe), with its write end already closed so any read on it returns
-// EOF immediately instead of blocking - exercising the same code path
-// run() takes when getsloth isn't given an interactive terminal to
-// forward, without leaking a goroutine blocked on an empty pipe.
-func nonTerminalStdin(t *testing.T) *os.File {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("closing pipe writer: %v", err)
-	}
-	t.Cleanup(func() { _ = r.Close() })
-	return r
-}
 
 func TestRun_PrintsOutputAndExitsZero(t *testing.T) {
 	var out bytes.Buffer
@@ -109,11 +93,37 @@ func TestRun_PanicKill_TerminatesEntireProcessGroup(t *testing.T) {
 		t.Fatal("run() did not return after panicKill was triggered")
 	}
 
-	// Signal 0 checks liveness without actually sending a signal -
-	// ESRCH means the process is gone.
-	if err := syscall.Kill(childPID, 0); err == nil {
+	if !waitUntilProcessGone(childPID, 3*time.Second) {
 		t.Errorf("background child pid %d is still alive after panicKill - the kill did not reach the whole process group", childPID)
 	}
+}
+
+// waitUntilProcessGone polls because SIGKILL delivery is asynchronous, and
+// treats a Linux zombie as gone: the process is dead but its new parent (init
+// or a container's PID 1) may not have reaped it yet, and signal 0 still
+// succeeds on a zombie.
+func waitUntilProcessGone(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := syscall.Kill(pid, 0); err == syscall.ESRCH || isZombie(pid) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func isZombie(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	// The state letter follows the parenthesised command name, which may
+	// itself contain spaces or parentheses, so anchor on the last ")".
+	end := bytes.LastIndexByte(data, ')')
+	return end >= 0 && end+2 < len(data) && data[end+2] == 'Z'
 }
 
 func TestGatedWriter_DropsWritesWhenInactive(t *testing.T) {
@@ -226,11 +236,11 @@ func TestGatedWriter_PreservesUnknownPrefixSequenceWhenActive(t *testing.T) {
 	}
 }
 
-func TestRun_OnPTYReadyCalledWithMasterFile(t *testing.T) {
+func TestRun_OnPTYReadyCalledWithConnection(t *testing.T) {
 	var out bytes.Buffer
-	var got *os.File
+	var got ptyConn
 
-	code := run([]string{"echo", "hi"}, nonTerminalStdin(t), &out, nil, func(f *os.File) { got = f }, nil, nil, nil)
+	code := run([]string{"echo", "hi"}, nonTerminalStdin(t), &out, nil, func(f ptyConn) { got = f }, nil, nil, nil)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)

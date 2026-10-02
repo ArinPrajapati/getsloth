@@ -65,7 +65,6 @@ export function renderAppShell(root: HTMLElement): void {
 
   const overlayLayer = document.createElement('div');
   overlayLayer.className = 'viewer-overlays';
-  overlayLayer.setAttribute('aria-label', 'Viewer overlays');
 
   const chatPanel = overlayPanel('chat', 'Chat overlay');
   const controlPanel = overlayPanel('control', 'Control overlay');

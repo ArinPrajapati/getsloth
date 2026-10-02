@@ -87,6 +87,7 @@ func TestLaunchFromArgs_ExplicitRemoteModeKeepsWrappedCommand(t *testing.T) {
 }
 
 func TestCommandFromArgs_DefaultsToUserShell(t *testing.T) {
+	skipOnWindows(t, "Windows defaults to COMSPEC, covered by TestDefaultShell_UsesComspec")
 	t.Setenv("SHELL", "/bin/zsh")
 
 	got := commandFromArgs([]string{"getsloth"})
@@ -98,6 +99,7 @@ func TestCommandFromArgs_DefaultsToUserShell(t *testing.T) {
 }
 
 func TestCommandFromArgs_FallsBackToSh(t *testing.T) {
+	skipOnWindows(t, "Windows defaults to COMSPEC, covered by TestDefaultShell_UsesComspec")
 	t.Setenv("SHELL", "")
 
 	got := commandFromArgs([]string{"getsloth"})

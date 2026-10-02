@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -64,6 +65,88 @@ func TestLaunchLinuxHostControlConsole_DoesNotStartWhenNoTerminalExists(t *testi
 	)
 	if err == nil || started {
 		t.Fatalf("err = %v, started = %t; want fallback error without a process", err, started)
+	}
+}
+
+func TestFindWindowsTerminal_PrefersWindowsTerminalExecutable(t *testing.T) {
+	lookPath := func(name string) (string, error) {
+		if name == "wt.exe" {
+			return `C:\Windows\System32\wt.exe`, nil
+		}
+		return "", exec.ErrNotFound
+	}
+
+	got, err := findWindowsTerminal(lookPath)
+	if err != nil || got != `C:\Windows\System32\wt.exe` {
+		t.Fatalf("findWindowsTerminal() = %q, %v", got, err)
+	}
+}
+
+func TestFindWindowsTerminal_ReturnsErrorWhenUnavailable(t *testing.T) {
+	_, err := findWindowsTerminal(func(string) (string, error) { return "", exec.ErrNotFound })
+	if err == nil {
+		t.Fatal("findWindowsTerminal() error = nil, want unavailable-terminal error")
+	}
+}
+
+func TestWindowsHostControlLaunchArgsOpenNewWindow(t *testing.T) {
+	got := windowsHostControlLaunchArgs(`C:\Program Files\getsloth\getsloth.exe`, `C:\Users\host\control.sock`)
+	want := []string{
+		"-w", "-1", "new-tab", "--title", "getsloth host control",
+		`C:\Program Files\getsloth\getsloth.exe`, "control", "--socket", `C:\Users\host\control.sock`, "--watch",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("windowsHostControlLaunchArgs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLaunchWindowsHostControlConsoleFallsBackToNativeConsole(t *testing.T) {
+	var started string
+	err := launchWindowsHostControlConsole(
+		`C:\Program Files\getsloth\getsloth.exe`, `C:\Users\host\control.sock`,
+		func(string) (string, error) { return "", exec.ErrNotFound },
+		func(string, []string) error {
+			t.Fatal("Windows Terminal should not start when unavailable")
+			return nil
+		},
+		func(name string, args []string) error {
+			started = name + " " + strings.Join(args, " ")
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("launchWindowsHostControlConsole() error = %v", err)
+	}
+	if want := `C:\Program Files\getsloth\getsloth.exe control --socket C:\Users\host\control.sock --watch`; started != want {
+		t.Fatalf("native fallback command = %q, want %q", started, want)
+	}
+}
+
+func TestLaunchWindowsHostControlConsoleFallsBackWhenWindowsTerminalFails(t *testing.T) {
+	var fallbackStarted bool
+	err := launchWindowsHostControlConsole(
+		`C:\getsloth.exe`, `C:\control.sock`,
+		func(string) (string, error) { return `C:\Windows\System32\wt.exe`, nil },
+		func(string, []string) error { return errors.New("Windows Terminal unavailable") },
+		func(name string, args []string) error {
+			fallbackStarted = name == `C:\getsloth.exe` && reflect.DeepEqual(args, []string{"control", "--socket", `C:\control.sock`, "--watch"})
+			return nil
+		},
+	)
+	if err != nil || !fallbackStarted {
+		t.Fatalf("launchWindowsHostControlConsole() = %v, fallback started = %t", err, fallbackStarted)
+	}
+}
+
+func TestLaunchWindowsHostControlConsoleReturnsFallbackError(t *testing.T) {
+	err := launchWindowsHostControlConsole(
+		`C:\getsloth.exe`, `C:\control.sock`,
+		func(string) (string, error) { return "", exec.ErrNotFound },
+		func(string, []string) error { return nil },
+		func(string, []string) error { return errors.New("new console failed") },
+	)
+	if err == nil || !strings.Contains(err.Error(), "new console failed") {
+		t.Fatalf("launchWindowsHostControlConsole() error = %v, want native fallback error", err)
 	}
 }
 

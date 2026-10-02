@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arinprajapati/getsloth/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -35,12 +36,27 @@ type Connection struct {
 	id            string
 	authenticated bool
 	displayName   string
+	health        connectionHealth
 
 	writeMu sync.Mutex
 }
 
+type connectionHealth struct {
+	pendingNonce string
+	pendingAt    time.Time
+	rttMs        *int64
+	quality      string
+}
+
 func newConnection(ws *websocket.Conn, id, role string) *Connection {
-	return &Connection{ws: ws, id: id, role: role}
+	return &Connection{
+		ws:   ws,
+		id:   id,
+		role: role,
+		health: connectionHealth{
+			quality: protocol.ViewerQualityUnknown,
+		},
+	}
 }
 
 // Role returns "host" or "viewer". Unlike id, this never changes for
@@ -84,6 +100,64 @@ func (c *Connection) setAuthenticated(v bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.authenticated = v
+}
+
+func (c *Connection) beginHealthPing(nonce string, sentAt time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.health.pendingNonce != "" {
+		return false
+	}
+	c.health.pendingNonce = nonce
+	c.health.pendingAt = sentAt
+	return true
+}
+
+func (c *Connection) recordHealthPong(nonce string, receivedAt time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.health.pendingNonce != nonce {
+		return false
+	}
+
+	rtt := receivedAt.Sub(c.health.pendingAt)
+	if rtt < 0 {
+		return false
+	}
+	rttMs := rtt.Milliseconds()
+	c.health.pendingNonce = ""
+	c.health.pendingAt = time.Time{}
+	c.health.rttMs = &rttMs
+	c.health.quality = healthQuality(rtt)
+	return true
+}
+
+func (c *Connection) expireHealthPing(now time.Time, timeout time.Duration) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.health.pendingNonce == "" || now.Sub(c.health.pendingAt) < timeout {
+		return false
+	}
+	c.health.pendingNonce = ""
+	c.health.pendingAt = time.Time{}
+	c.health.rttMs = nil
+	c.health.quality = protocol.ViewerQualityStalled
+	return true
+}
+
+func (c *Connection) healthSnapshot() (*int64, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var rttMs *int64
+	if c.health.rttMs != nil {
+		value := *c.health.rttMs
+		rttMs = &value
+	}
+	quality := c.health.quality
+	if quality == "" {
+		quality = protocol.ViewerQualityUnknown
+	}
+	return rttMs, quality
 }
 
 func (c *Connection) writeJSON(v any) error {

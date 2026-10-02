@@ -153,3 +153,27 @@ func TestHostSessionStatus_DisconnectedAndSanitizesViewerNames(t *testing.T) {
 		t.Fatalf("viewer name injected terminal controls: %q", out.String())
 	}
 }
+
+func TestHostSessionStatus_TracksViewerHealthAndClearsStaleRTT(t *testing.T) {
+	var out bytes.Buffer
+	status := newHostSessionStatus(protocol.SessionModeRemote, &out)
+	rttMs := int64(42)
+	status.updatePresence(protocol.PresenceMsg{Connections: []protocol.PresenceConnectionInfo{
+		{ID: "host", Role: "host", IsActiveWriter: true},
+		{ID: "viewer-1", Role: "viewer", DisplayName: "Phone", RTTMs: &rttMs, Quality: protocol.ViewerQualityGood},
+	}})
+
+	viewers := status.snapshot().Viewers
+	if len(viewers) != 1 || viewers[0].RTTMs == nil || *viewers[0].RTTMs != 42 || viewers[0].Quality != protocol.ViewerQualityGood {
+		t.Fatalf("measured viewer health = %+v, want 42ms/good", viewers)
+	}
+
+	status.updatePresence(protocol.PresenceMsg{Connections: []protocol.PresenceConnectionInfo{
+		{ID: "host", Role: "host", IsActiveWriter: true},
+		{ID: "viewer-1", Role: "viewer", DisplayName: "Phone", Quality: protocol.ViewerQualityStalled},
+	}})
+	viewers = status.snapshot().Viewers
+	if len(viewers) != 1 || viewers[0].RTTMs != nil || viewers[0].Quality != protocol.ViewerQualityStalled {
+		t.Fatalf("stale viewer health = %+v, want nil RTT/stalled", viewers)
+	}
+}

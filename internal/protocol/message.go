@@ -19,6 +19,13 @@ const (
 	DefaultRows       = 24
 )
 
+const (
+	ViewerQualityUnknown = "unknown"
+	ViewerQualityGood    = "good"
+	ViewerQualityLaggy   = "laggy"
+	ViewerQualityStalled = "stalled"
+)
+
 // Envelope is the header every protocol message shares.
 type Envelope struct {
 	V    int    `json:"v"`
@@ -209,6 +216,20 @@ type TerminalSizeMsg struct {
 	Rows int `json:"rows"`
 }
 
+// PingMsg is a relay-issued health probe for one authenticated viewer. The
+// nonce is opaque and is returned unchanged in PongMsg; the relay measures
+// elapsed time itself rather than trusting a client-reported timestamp.
+type PingMsg struct {
+	Envelope
+	Nonce string `json:"nonce"`
+}
+
+// PongMsg is the viewer's response to a relay-issued PingMsg.
+type PongMsg struct {
+	Envelope
+	Nonce string `json:"nonce"`
+}
+
 // TakeControlMsg requests the sender become the active writer - sent by
 // either the host or a viewer, host or viewer alike. Relay reassigns
 // immediately; a host-originated one is additionally authoritative for
@@ -280,6 +301,8 @@ type PresenceConnectionInfo struct {
 	Role           string `json:"role"`
 	DisplayName    string `json:"display_name,omitempty"`
 	IsActiveWriter bool   `json:"is_active_writer"`
+	RTTMs          *int64 `json:"rtt_ms,omitempty"`
+	Quality        string `json:"quality,omitempty"`
 }
 
 // PresenceMsg is broadcast to every connection (host and every

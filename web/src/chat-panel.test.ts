@@ -20,6 +20,25 @@ describe('createChatPanel', () => {
     expect(input.value).toBe('');
   });
 
+  it('ignores a whitespace-only message', () => {
+    const root = document.createElement('div');
+    const onSend = vi.fn();
+
+    createChatPanel(root, { onSend });
+    const input = root.querySelector<HTMLInputElement>('#chat-message');
+    expect(input).not.toBeNull();
+
+    if (!input) {
+      throw new Error('Expected chat input to render');
+    }
+
+    input.value = '   ';
+    root.querySelector('form')?.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(input.value).toBe('   ');
+  });
+
   it('renders received messages as text content', () => {
     const root = document.createElement('div');
     const panel = createChatPanel(root, { onSend: () => undefined });
@@ -29,5 +48,17 @@ describe('createChatPanel', () => {
     expect(root.querySelector('[aria-label="Chat messages"]')?.textContent).toContain('Phone');
     expect(root.querySelector('[aria-label="Chat messages"]')?.textContent).toContain('<script>alert(1)</script>');
     expect(root.querySelector('script')).toBeNull();
+  });
+
+  it('uses role labels when received messages have no display name', () => {
+    const root = document.createElement('div');
+    const panel = createChatPanel(root, { onSend: () => undefined });
+
+    panel.addMessage({ sender_id: 'host-1', sender_role: 'host', text: 'Host update' });
+    panel.addMessage({ sender_id: 'viewer-1', sender_role: 'viewer', text: 'Viewer update' });
+
+    const messages = root.querySelector('[aria-label="Chat messages"]');
+    expect(messages?.textContent).toContain('Host: Host update');
+    expect(messages?.textContent).toContain('Viewer: Viewer update');
   });
 });
