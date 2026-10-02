@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -33,18 +32,12 @@ type winPTY struct {
 	process windows.Handle
 	job     windows.Handle
 
-	// lastRead is when output last arrived, so watch can tell when the
-	// pseudoconsole has finished rendering after the child exits.
-	lastRead atomic.Int64
-
 	consoleOnce sync.Once
 	closeOnce   sync.Once
 	exited      chan struct{}
 	exitCode    int
 	exitErr     error
 }
-
-var conptyCreateSuspended = true
 
 func startPTY(args []string, cols, rows int) (ptyProcess, error) {
 	executable, err := exec.LookPath(args[0])
@@ -122,15 +115,16 @@ func (p *winPTY) spawn(applicationName, commandLine *uint16) error {
 		return err
 	}
 
+	// STARTF_USESTDHANDLES with zeroed handles stops Windows from handing the
+	// child this process's own stdio. Without it, a host whose stdin/stdout are
+	// redirected (a service, CI, a pipe) gets a child attached to the
+	// pseudoconsole but unable to read or write through it.
 	startup := windows.StartupInfoEx{
-		StartupInfo:             windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfoEx{}))},
+		StartupInfo:             windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfoEx{})), Flags: windows.STARTF_USESTDHANDLES},
 		ProcThreadAttributeList: attributes.List(),
 	}
 	var info windows.ProcessInformation
-	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT)
-	if conptyCreateSuspended {
-		flags |= windows.CREATE_SUSPENDED
-	}
+	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT | windows.CREATE_SUSPENDED)
 	if err := windows.CreateProcess(applicationName, commandLine, nil, nil, false, flags, nil, nil, &startup.StartupInfo, &info); err != nil {
 		_ = windows.CloseHandle(job)
 		return err
@@ -143,13 +137,11 @@ func (p *winPTY) spawn(applicationName, commandLine *uint16) error {
 		_ = windows.CloseHandle(job)
 		return fmt.Errorf("assign process to job object: %w", err)
 	}
-	if conptyCreateSuspended {
-		if _, err := windows.ResumeThread(info.Thread); err != nil {
-			_ = windows.TerminateJobObject(job, 1)
-			_ = windows.CloseHandle(info.Process)
-			_ = windows.CloseHandle(job)
-			return fmt.Errorf("resume process: %w", err)
-		}
+	if _, err := windows.ResumeThread(info.Thread); err != nil {
+		_ = windows.TerminateJobObject(job, 1)
+		_ = windows.CloseHandle(info.Process)
+		_ = windows.CloseHandle(job)
+		return fmt.Errorf("resume process: %w", err)
 	}
 	p.process = info.Process
 	p.job = job
@@ -167,44 +159,14 @@ func (p *winPTY) watch() {
 		}
 		p.exitCode = int(code)
 	}
-	p.awaitOutputQuiet()
 	p.closeConsole()
-}
-
-// awaitOutputQuiet holds off closing the pseudoconsole after the child exits.
-// ConPTY renders the screen on its own schedule, so a command that prints and
-// exits immediately can still have unrendered text when the process ends, and
-// closing the console then discards it. The caller's Read loop keeps draining
-// meanwhile, which is what refreshes lastRead.
-func (p *winPTY) awaitOutputQuiet() {
-	const (
-		minWait = 300 * time.Millisecond
-		quiet   = 200 * time.Millisecond
-		maxWait = 3 * time.Second
-	)
-	start := time.Now()
-	for {
-		elapsed := time.Since(start)
-		idle := time.Since(time.Unix(0, p.lastRead.Load()))
-		if (elapsed >= minWait && idle >= quiet) || elapsed >= maxWait {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
 }
 
 func (p *winPTY) closeConsole() {
 	p.consoleOnce.Do(func() { windows.ClosePseudoConsole(p.console) })
 }
 
-func (p *winPTY) Read(b []byte) (int, error) {
-	n, err := p.out.Read(b)
-	if n > 0 {
-		p.lastRead.Store(time.Now().UnixNano())
-	}
-	return n, err
-}
-
+func (p *winPTY) Read(b []byte) (int, error)  { return p.out.Read(b) }
 func (p *winPTY) Write(b []byte) (int, error) { return p.in.Write(b) }
 
 func (p *winPTY) resize(cols, rows int) error {
