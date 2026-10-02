@@ -44,6 +44,8 @@ type winPTY struct {
 	exitErr     error
 }
 
+var conptyCreateSuspended = true
+
 func startPTY(args []string, cols, rows int) (ptyProcess, error) {
 	executable, err := exec.LookPath(args[0])
 	if err != nil {
@@ -125,7 +127,10 @@ func (p *winPTY) spawn(applicationName, commandLine *uint16) error {
 		ProcThreadAttributeList: attributes.List(),
 	}
 	var info windows.ProcessInformation
-	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT | windows.CREATE_SUSPENDED)
+	flags := uint32(windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_UNICODE_ENVIRONMENT)
+	if conptyCreateSuspended {
+		flags |= windows.CREATE_SUSPENDED
+	}
 	if err := windows.CreateProcess(applicationName, commandLine, nil, nil, false, flags, nil, nil, &startup.StartupInfo, &info); err != nil {
 		_ = windows.CloseHandle(job)
 		return err
@@ -138,11 +143,13 @@ func (p *winPTY) spawn(applicationName, commandLine *uint16) error {
 		_ = windows.CloseHandle(job)
 		return fmt.Errorf("assign process to job object: %w", err)
 	}
-	if _, err := windows.ResumeThread(info.Thread); err != nil {
-		_ = windows.TerminateJobObject(job, 1)
-		_ = windows.CloseHandle(info.Process)
-		_ = windows.CloseHandle(job)
-		return fmt.Errorf("resume process: %w", err)
+	if conptyCreateSuspended {
+		if _, err := windows.ResumeThread(info.Thread); err != nil {
+			_ = windows.TerminateJobObject(job, 1)
+			_ = windows.CloseHandle(info.Process)
+			_ = windows.CloseHandle(job)
+			return fmt.Errorf("resume process: %w", err)
+		}
 	}
 	p.process = info.Process
 	p.job = job
