@@ -60,6 +60,11 @@ export class RelayClient {
   private readonly onStateChange: (state: ConnectionState) => void;
   private readonly url: string;
   private socket: SocketLike | null = null;
+  private socketOpen = false;
+  // The QR link submits the password the moment the page loads, which is
+  // usually before the socket has finished connecting. send() throws while a
+  // socket is still CONNECTING, so the attempt is held until onopen.
+  private pendingAuth: AuthMessage | null = null;
   private token: string | null = null;
   private intentionalClose = false;
   private reconnectDeadline: number | null = null;
@@ -110,16 +115,24 @@ export class RelayClient {
 
     const socket = this.createSocket(this.url);
     this.socket = socket;
+    this.socketOpen = false;
 
     socket.onopen = () => {
+      this.socketOpen = true;
       if (isResume && this.token) {
         socket.send(JSON.stringify({ v: 1, type: 'resume', token: this.token }));
+      }
+      if (this.pendingAuth) {
+        const auth = this.pendingAuth;
+        this.pendingAuth = null;
+        socket.send(JSON.stringify(auth));
       }
 
       this.onStateChange('connected');
     };
 
     socket.onclose = () => {
+      this.socketOpen = false;
       this.onStateChange('disconnected');
       this.scheduleReconnect();
     };
@@ -191,7 +204,11 @@ export class RelayClient {
   }
 
   sendAuth(message: AuthMessage): void {
-    this.socket?.send(JSON.stringify(message));
+    if (!this.socket || !this.socketOpen) {
+      this.pendingAuth = message;
+      return;
+    }
+    this.socket.send(JSON.stringify(message));
   }
 
   sendChatMessage(text: string): void {
