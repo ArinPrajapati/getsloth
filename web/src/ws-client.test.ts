@@ -112,6 +112,7 @@ describe('RelayClient', () => {
     });
 
     client.connect();
+    FakeSocket.created[0]?.onopen?.(new Event('open'));
     client.sendAuth({ v: 1, type: 'auth', viewer_pubkey_base64: 'pub', ciphertext_base64: 'cipher' });
     FakeSocket.created[0]?.emit(JSON.stringify({ v: 1, type: 'auth_result', ok: true, token: 'token', connection_id: 'viewer-1' }));
 
@@ -344,5 +345,79 @@ describe('RelayClient', () => {
 
     expect(kicked).toEqual(['kill_switch']);
     expect(ended).toEqual(['host_ended']);
+  });
+});
+
+class ConnectingSocket extends FakeSocket {
+  private connecting = true;
+
+  override send(data: string): void {
+    if (this.connecting) {
+      throw new DOMException("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.", 'InvalidStateError');
+    }
+    super.send(data);
+  }
+
+  open(): void {
+    this.connecting = false;
+    this.onopen?.(new Event('open'));
+  }
+}
+
+describe('RelayClient auth before the socket is open', () => {
+  const authMessage = {
+    v: 1,
+    type: 'auth',
+    viewer_pubkey_base64: 'pub',
+    ciphertext_base64: 'cipher'
+  } as const;
+
+  function connectingClient(): { client: RelayClient; sockets: ConnectingSocket[] } {
+    const sockets: ConnectingSocket[] = [];
+    const client = new RelayClient({
+      url: 'ws://relay.test/ws/viewer/session',
+      createSocket: () => {
+        const socket = new ConnectingSocket('ws://relay.test/ws/viewer/session');
+        sockets.push(socket);
+        return socket;
+      },
+      onStateChange: () => undefined,
+      onOutput: () => undefined,
+      onErrorMessage: () => undefined
+    });
+    client.connect();
+    return { client, sockets };
+  }
+
+  it('holds the auth message instead of throwing while the socket is still connecting', () => {
+    const { client, sockets } = connectingClient();
+
+    expect(() => {
+      client.sendAuth(authMessage);
+    }).not.toThrow();
+    expect(sockets[0]?.sent).toEqual([]);
+
+    sockets[0]?.open();
+
+    expect(sockets[0]?.sent).toEqual([JSON.stringify(authMessage)]);
+  });
+
+  it('sends the auth message once, not again on later opens', () => {
+    const { client, sockets } = connectingClient();
+    client.sendAuth(authMessage);
+    sockets[0]?.open();
+
+    sockets[0]?.open();
+
+    expect(sockets[0]?.sent).toEqual([JSON.stringify(authMessage)]);
+  });
+
+  it('sends the auth message immediately when the socket is already open', () => {
+    const { client, sockets } = connectingClient();
+    sockets[0]?.open();
+
+    client.sendAuth(authMessage);
+
+    expect(sockets[0]?.sent).toEqual([JSON.stringify(authMessage)]);
   });
 });
