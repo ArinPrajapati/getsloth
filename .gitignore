@@ -35,3 +35,7 @@ deploy/server-notes.md
 # feedback/README.md for the convention. README itself stays tracked.
 feedback/*
 !feedback/README.md
+
+# Locally built binaries
+/cmd/getsloth/getsloth
+/cmd/getsloth-relay/getsloth-relay
