@@ -26,6 +26,8 @@ func hostControlLaunchArgs(executablePath, socketPath string) (string, []string)
 
 var linuxTerminalCandidates = []string{"gnome-terminal", "konsole", "xterm", "x-terminal-emulator"}
 
+var windowsTerminalCandidates = []string{"wt.exe", "wt"}
+
 func findLinuxTerminal(lookPath func(string) (string, error)) (string, error) {
 	for _, name := range linuxTerminalCandidates {
 		if path, err := lookPath(name); err == nil {
@@ -63,6 +65,45 @@ func startLinuxHostControlLauncher(name string, args []string) error {
 	return nil
 }
 
+func findWindowsTerminal(lookPath func(string) (string, error)) (string, error) {
+	for _, name := range windowsTerminalCandidates {
+		if path, err := lookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", errors.New("windows terminal was not found")
+}
+
+func windowsHostControlCommandArgs(executablePath, socketPath string) []string {
+	return []string{executablePath, "control", "--socket", socketPath, "--watch"}
+}
+
+func windowsHostControlLaunchArgs(executablePath, socketPath string) []string {
+	return append(
+		[]string{"-w", "-1", "new-tab", "--title", "getsloth host control"},
+		windowsHostControlCommandArgs(executablePath, socketPath)...,
+	)
+}
+
+func launchWindowsHostControlConsole(
+	executablePath string,
+	socketPath string,
+	lookPath func(string) (string, error),
+	startTerminal func(string, []string) error,
+	startFallback func(string, []string) error,
+) error {
+	if terminalPath, err := findWindowsTerminal(lookPath); err == nil {
+		if err := startTerminal(terminalPath, windowsHostControlLaunchArgs(executablePath, socketPath)); err == nil {
+			return nil
+		}
+	}
+
+	if err := startFallback(executablePath, windowsHostControlCommandArgs(executablePath, socketPath)[1:]); err != nil {
+		return fmt.Errorf("open Windows host control console: %w", err)
+	}
+	return nil
+}
+
 func launchHostControlConsole(socketPath string) error {
 	executablePath, err := os.Executable()
 	if err != nil {
@@ -78,6 +119,8 @@ func launchHostControlConsole(socketPath string) error {
 		return nil
 	case "linux":
 		return launchLinuxHostControlConsole(executablePath, socketPath, exec.LookPath, startLinuxHostControlLauncher)
+	case "windows":
+		return launchWindowsHostControlConsole(executablePath, socketPath, exec.LookPath, startWindowsHostControlLauncher, startWindowsHostControlFallback)
 	default:
 		return fmt.Errorf("automatic host control console is not supported on %s", runtime.GOOS)
 	}

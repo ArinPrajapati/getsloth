@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	qrcode "github.com/skip2/go-qrcode"
 )
 
@@ -24,18 +25,21 @@ const quietZoneModules = 1
 // renderQRCode returns a compact ASCII-art QR code for data, packing two
 // QR rows into each terminal line with the Unicode upper-half-block glyph
 // (▀): its foreground color paints the top module, its background color
-// paints the bottom one. Both colors are always set explicitly via
-// lipgloss (the same terminal-styling library used elsewhere in this
-// codebase, so color capability / NO_COLOR detection stays consistent) -
-// an earlier version used the go-qrcode library's own half-block renderer,
-// which leaves color to the terminal's default foreground/background and
-// corrupted visibly on at least one real terminal. Explicit colors don't
-// depend on what a user's theme happens to be, only on the terminal
-// supporting ANSI color at all, which is far more reliably true.
+// paints the bottom one. Colors are set explicitly via lipgloss (the same
+// terminal-styling library used elsewhere in this codebase, so color
+// capability / NO_COLOR detection stays consistent) when the terminal can
+// render ANSI. An earlier version used the go-qrcode library's own half-block
+// renderer, which leaves color to the terminal's defaults and corrupted
+// visibly on at least one real terminal. ASCII/no-color terminals use the
+// matching plain half-block glyphs instead of collapsing every cell to `▀`.
 // Recovery level Low keeps the code physically as small as possible -
 // session URLs are already long since they carry the host's auth public
 // key in the fragment, per docs/protocol.md.
 func renderQRCode(data string) (string, error) {
+	return renderQRCodeWithRenderer(data, lipgloss.NewRenderer(os.Stderr))
+}
+
+func renderQRCodeWithRenderer(data string, renderer *lipgloss.Renderer) (string, error) {
 	qr, err := qrcode.New(data, qrcode.Low)
 	if err != nil {
 		return "", fmt.Errorf("render QR code: %w", err)
@@ -45,7 +49,10 @@ func renderQRCode(data string) (string, error) {
 	qr.DisableBorder = true
 
 	bits := padQuietZone(qr.Bitmap(), quietZoneModules)
-	renderer := lipgloss.NewRenderer(os.Stderr)
+	if renderer.ColorProfile() == termenv.Ascii {
+		return renderPlainHalfBlocks(bits), nil
+	}
+
 	black := lipgloss.Color("0")
 	white := lipgloss.Color("15")
 
@@ -72,6 +79,33 @@ func renderQRCode(data string) (string, error) {
 		b.WriteString("\n")
 	}
 	return b.String(), nil
+}
+
+// renderPlainHalfBlocks preserves the QR matrix when ANSI colors are disabled.
+// A colored upper-half block has two independently painted modules; these
+// glyphs encode the same four combinations without relying on terminal state.
+func renderPlainHalfBlocks(bits [][]bool) string {
+	var b strings.Builder
+	for y := 0; y < len(bits); y += 2 {
+		for x, top := range bits[y] {
+			bottom := false
+			if y+1 < len(bits) {
+				bottom = bits[y+1][x]
+			}
+			switch {
+			case top && bottom:
+				b.WriteRune('█')
+			case top:
+				b.WriteRune('▀')
+			case bottom:
+				b.WriteRune('▄')
+			default:
+				b.WriteRune(' ')
+			}
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 // padQuietZone returns a copy of bits surrounded by margin modules of

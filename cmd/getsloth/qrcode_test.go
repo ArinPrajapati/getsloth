@@ -1,10 +1,13 @@
 package main
 
 import (
+	"io"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	qrcode "github.com/skip2/go-qrcode"
 )
 
@@ -13,10 +16,10 @@ import (
 // color code (and therefore byte length) each module happened to use.
 var ansiSGR = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-func TestRenderQRCode(t *testing.T) {
-	url := "https://getsloth.dev/s/x7k2#k=abc123"
+const realisticQRURL = "https://getsloth.dev/s/cF9ncb2UVeXl#k=BGCZOM5_xWE31n7pnG899kLa1VsEDORFbPAbG82OQPm6nBG-_Ws9YFiDtZLBSDLbL7vJzLodfm_v7pvKeY7EZHs&p=issue7pass"
 
-	art, err := renderQRCode(url)
+func TestRenderQRCode(t *testing.T) {
+	art, err := renderQRCode(realisticQRURL)
 	if err != nil {
 		t.Fatalf("renderQRCode returned error: %v", err)
 	}
@@ -59,6 +62,69 @@ func TestRenderQRCodePacksTwoRowsPerLine(t *testing.T) {
 	wantLines := (matrixHeight + 1) / 2 // ceil(matrixHeight / 2)
 	if len(lines) != wantLines {
 		t.Fatalf("got %d rendered line(s) for a %d-row matrix, want %d (two QR rows per line)", len(lines), matrixHeight, wantLines)
+	}
+}
+
+func TestRenderQRCodeWithoutColorPreservesModuleContrast(t *testing.T) {
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.Ascii)
+
+	art, err := renderQRCodeWithRenderer(realisticQRURL, renderer)
+	if err != nil {
+		t.Fatalf("renderQRCodeWithRenderer returned error: %v", err)
+	}
+	if strings.Contains(art, "\x1b[") {
+		t.Fatal("ASCII QR rendering must not emit ANSI escape sequences")
+	}
+
+	qr, err := qrcode.New(realisticQRURL, qrcode.Low)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qr.DisableBorder = true
+	want := padQuietZone(qr.Bitmap(), quietZoneModules)
+	lines := strings.Split(strings.TrimSuffix(art, "\n"), "\n")
+	if len(lines) != (len(want)+1)/2 {
+		t.Fatalf("colorless QR has %d rows, want %d", len(lines), (len(want)+1)/2)
+	}
+	for lineIndex, line := range lines {
+		cells := []rune(line)
+		if len(cells) != len(want[0]) {
+			t.Fatalf("row %d width = %d, want %d", lineIndex, len(cells), len(want[0]))
+		}
+		for x, cell := range cells {
+			top := cell == '▀' || cell == '█'
+			bottom := cell == '▄' || cell == '█'
+			if cell != ' ' && cell != '▀' && cell != '▄' && cell != '█' {
+				t.Fatalf("unexpected QR glyph %q", cell)
+			}
+			y := lineIndex * 2
+			wantBottom := y+1 < len(want) && want[y+1][x]
+			if top != want[y][x] || bottom != wantBottom {
+				t.Fatalf("QR module pair at (%d,%d) = %t/%t, want %t/%t", x, y, top, bottom, want[y][x], wantBottom)
+			}
+		}
+	}
+}
+
+func TestRenderQRCodeWithColorStylesBothHalves(t *testing.T) {
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.ANSI)
+
+	art, err := renderQRCodeWithRenderer(realisticQRURL, renderer)
+	if err != nil {
+		t.Fatalf("renderQRCodeWithRenderer returned error: %v", err)
+	}
+	if !strings.Contains(art, "\x1b[") {
+		t.Fatal("ANSI QR rendering must style module cells")
+	}
+
+	lines := strings.Split(strings.TrimRight(art, "\n"), "\n")
+	width := len([]rune(ansiSGR.ReplaceAllString(lines[0], "")))
+	for i, line := range lines {
+		if got := len([]rune(ansiSGR.ReplaceAllString(line, ""))); got != width {
+			t.Fatalf("ANSI line %d has visible width %d, want %d", i, got, width)
+		}
 	}
 }
 

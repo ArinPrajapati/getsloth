@@ -48,13 +48,18 @@ func startHostControlServer(snapshot func() hostControlSnapshot) (*hostControlSe
 		return nil, fmt.Errorf("create host control directory: %w", err)
 	}
 
+	if err := restrictToCurrentUser(stateDir, true); err != nil {
+		_ = os.RemoveAll(stateDir)
+		return nil, fmt.Errorf("restrict host control directory: %w", err)
+	}
+
 	socketPath := filepath.Join(stateDir, "control.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		_ = os.RemoveAll(stateDir)
 		return nil, fmt.Errorf("listen on host control socket: %w", err)
 	}
-	if err := os.Chmod(socketPath, 0o600); err != nil {
+	if err := restrictToCurrentUser(socketPath, false); err != nil {
 		_ = listener.Close()
 		_ = os.RemoveAll(stateDir)
 		return nil, fmt.Errorf("restrict host control socket: %w", err)

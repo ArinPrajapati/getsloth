@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -82,14 +81,14 @@ func encryptAsViewer(t *testing.T, hostPubkeyBase64URL, sessionID, password stri
 
 // dummyControlState provides a runHostMessageLoop with the plumbing
 // B6's control tests need but auth-focused tests don't exercise: an
-// always-active writer flag and a ptmx channel pre-filled with nil,
+// always-active writer flag and a ptmx channel pre-filled with a discarding connection,
 // safe as long as the test never sends an "input" message (which would
 // try to write through it).
-func dummyControlState() (*atomic.Bool, chan *os.File) {
+func dummyControlState() (*atomic.Bool, chan ptyConn) {
 	active := &atomic.Bool{}
 	active.Store(true)
-	ptmxCh := make(chan *os.File, 1)
-	ptmxCh <- nil
+	ptmxCh := make(chan ptyConn, 1)
+	ptmxCh <- discardPTY{}
 	return active, ptmxCh
 }
 
@@ -251,3 +250,11 @@ func TestFullAuthFlow_WrongPassword_Rejected(t *testing.T) {
 		t.Fatal("auth_result.ok = true with the wrong password, want false")
 	}
 }
+
+// discardPTY is a ptyConn that accepts and drops everything.
+type discardPTY struct{}
+
+func (discardPTY) Read([]byte) (int, error)    { return 0, io.EOF }
+func (discardPTY) Write(p []byte) (int, error) { return len(p), nil }
+func (discardPTY) Close() error                { return nil }
+func (discardPTY) resize(int, int) error       { return nil }

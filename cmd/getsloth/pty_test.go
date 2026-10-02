@@ -1,33 +1,16 @@
+//go:build !windows
+
 package main
 
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 )
-
-// nonTerminalStdin returns an *os.File that is definitely not a terminal
-// (a pipe), with its write end already closed so any read on it returns
-// EOF immediately instead of blocking - exercising the same code path
-// run() takes when getsloth isn't given an interactive terminal to
-// forward, without leaking a goroutine blocked on an empty pipe.
-func nonTerminalStdin(t *testing.T) *os.File {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("closing pipe writer: %v", err)
-	}
-	t.Cleanup(func() { _ = r.Close() })
-	return r
-}
 
 func TestRun_PrintsOutputAndExitsZero(t *testing.T) {
 	var out bytes.Buffer
@@ -226,11 +209,11 @@ func TestGatedWriter_PreservesUnknownPrefixSequenceWhenActive(t *testing.T) {
 	}
 }
 
-func TestRun_OnPTYReadyCalledWithMasterFile(t *testing.T) {
+func TestRun_OnPTYReadyCalledWithConnection(t *testing.T) {
 	var out bytes.Buffer
-	var got *os.File
+	var got ptyConn
 
-	code := run([]string{"echo", "hi"}, nonTerminalStdin(t), &out, nil, func(f *os.File) { got = f }, nil, nil, nil)
+	code := run([]string{"echo", "hi"}, nonTerminalStdin(t), &out, nil, func(f ptyConn) { got = f }, nil, nil, nil)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
