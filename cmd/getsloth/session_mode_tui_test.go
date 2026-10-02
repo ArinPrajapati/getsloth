@@ -127,10 +127,12 @@ func TestShouldPromptForSessionModeRequiresInteractiveTerminals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create input: %v", err)
 	}
+	t.Cleanup(func() { _ = input.Close() })
 	output, err := os.CreateTemp(t.TempDir(), "output")
 	if err != nil {
 		t.Fatalf("create output: %v", err)
 	}
+	t.Cleanup(func() { _ = output.Close() })
 
 	if shouldPromptForSessionMode([]string{"getsloth", "claude"}, input, output) {
 		t.Fatal("regular files should not enable the interactive picker")

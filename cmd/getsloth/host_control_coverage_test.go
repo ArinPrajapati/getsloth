@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -133,7 +134,7 @@ func TestHostControlCoverage_LocalEndpointCleanupIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat host control socket: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	if got := info.Mode().Perm(); runtime.GOOS != "windows" && got != 0o600 {
 		t.Fatalf("host control socket permissions = %o, want 600", got)
 	}
 	if err := server.Close(); err != nil {

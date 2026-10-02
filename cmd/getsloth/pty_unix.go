@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/creack/pty"
@@ -14,6 +15,12 @@ import (
 type unixPTY struct {
 	*os.File
 	cmd *exec.Cmd
+
+	// resize reads the descriptor via File.Fd while the message loop may be
+	// tearing the session down, and os.File's Close is not safe against a
+	// concurrent Fd call, so both go through mu.
+	mu     sync.Mutex
+	closed bool
 }
 
 // startPTY spawns args on a new pseudo-terminal. pty.Start calls setsid()
@@ -34,7 +41,19 @@ func startPTY(args []string, cols, rows int) (ptyProcess, error) {
 func newUnixPTY(f *os.File) ptyConn { return &unixPTY{File: f} }
 
 func (p *unixPTY) resize(cols, rows int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return os.ErrClosed
+	}
 	return pty.Setsize(p.File, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+}
+
+func (p *unixPTY) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closed = true
+	return p.File.Close()
 }
 
 func (p *unixPTY) wait() (int, error) {

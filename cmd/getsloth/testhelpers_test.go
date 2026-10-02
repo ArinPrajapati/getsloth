@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -43,4 +44,11 @@ func nonTerminalStdin(t *testing.T) *os.File {
 	}
 	t.Cleanup(func() { _ = r.Close() })
 	return r
+}
+
+func skipOnWindows(t *testing.T, reason string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip(reason)
+	}
 }

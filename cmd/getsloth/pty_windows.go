@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -31,6 +32,10 @@ type winPTY struct {
 	out     *os.File
 	process windows.Handle
 	job     windows.Handle
+
+	// lastRead is when output last arrived, so watch can tell when the
+	// pseudoconsole has finished rendering after the child exits.
+	lastRead atomic.Int64
 
 	consoleOnce sync.Once
 	closeOnce   sync.Once
@@ -155,14 +160,44 @@ func (p *winPTY) watch() {
 		}
 		p.exitCode = int(code)
 	}
+	p.awaitOutputQuiet()
 	p.closeConsole()
+}
+
+// awaitOutputQuiet holds off closing the pseudoconsole after the child exits.
+// ConPTY renders the screen on its own schedule, so a command that prints and
+// exits immediately can still have unrendered text when the process ends, and
+// closing the console then discards it. The caller's Read loop keeps draining
+// meanwhile, which is what refreshes lastRead.
+func (p *winPTY) awaitOutputQuiet() {
+	const (
+		minWait = 300 * time.Millisecond
+		quiet   = 200 * time.Millisecond
+		maxWait = 3 * time.Second
+	)
+	start := time.Now()
+	for {
+		elapsed := time.Since(start)
+		idle := time.Since(time.Unix(0, p.lastRead.Load()))
+		if (elapsed >= minWait && idle >= quiet) || elapsed >= maxWait {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 func (p *winPTY) closeConsole() {
 	p.consoleOnce.Do(func() { windows.ClosePseudoConsole(p.console) })
 }
 
-func (p *winPTY) Read(b []byte) (int, error)  { return p.out.Read(b) }
+func (p *winPTY) Read(b []byte) (int, error) {
+	n, err := p.out.Read(b)
+	if n > 0 {
+		p.lastRead.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
 func (p *winPTY) Write(b []byte) (int, error) { return p.in.Write(b) }
 
 func (p *winPTY) resize(cols, rows int) error {

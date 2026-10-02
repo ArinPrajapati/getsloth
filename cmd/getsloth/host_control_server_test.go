@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/arinprajapati/getsloth/internal/protocol"
@@ -114,7 +115,9 @@ func TestHostControlServer_ReturnsLiveSnapshotOverPrivateSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat control socket: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows restricts the socket with an ACL, which os.Stat reports as 666;
+	// platform_windows_test.go covers that path.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("control socket permissions = %o, want 600", info.Mode().Perm())
 	}
 

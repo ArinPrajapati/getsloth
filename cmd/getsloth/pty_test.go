@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -92,11 +93,37 @@ func TestRun_PanicKill_TerminatesEntireProcessGroup(t *testing.T) {
 		t.Fatal("run() did not return after panicKill was triggered")
 	}
 
-	// Signal 0 checks liveness without actually sending a signal -
-	// ESRCH means the process is gone.
-	if err := syscall.Kill(childPID, 0); err == nil {
+	if !waitUntilProcessGone(childPID, 3*time.Second) {
 		t.Errorf("background child pid %d is still alive after panicKill - the kill did not reach the whole process group", childPID)
 	}
+}
+
+// waitUntilProcessGone polls because SIGKILL delivery is asynchronous, and
+// treats a Linux zombie as gone: the process is dead but its new parent (init
+// or a container's PID 1) may not have reaped it yet, and signal 0 still
+// succeeds on a zombie.
+func waitUntilProcessGone(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := syscall.Kill(pid, 0); err == syscall.ESRCH || isZombie(pid) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func isZombie(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	// The state letter follows the parenthesised command name, which may
+	// itself contain spaces or parentheses, so anchor on the last ")".
+	end := bytes.LastIndexByte(data, ')')
+	return end >= 0 && end+2 < len(data) && data[end+2] == 'Z'
 }
 
 func TestGatedWriter_DropsWritesWhenInactive(t *testing.T) {
