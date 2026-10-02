@@ -51,6 +51,10 @@ export function createTerminalView(
 ): TerminalView {
   const terminal = createTerminal();
 
+  element.setAttribute('role', 'region');
+  element.setAttribute('aria-label', 'Live terminal output');
+  element.setAttribute('aria-live', 'off');
+
   let isActive = false;
   let controlModifierArmed = false;
   let lastSize: TerminalSize | null = null;

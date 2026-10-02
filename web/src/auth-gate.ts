@@ -25,15 +25,19 @@ export function createAuthGate(root: HTMLElement, options: AuthGateOptions): Aut
   const panel = document.createElement('section');
   panel.className = 'auth-card';
   panel.setAttribute('aria-label', 'Session password');
+  panel.setAttribute('aria-labelledby', 'auth-gate-title');
 
   const title = document.createElement('h2');
+  title.id = 'auth-gate-title';
   title.textContent = 'Enter session password';
 
   const description = document.createElement('p');
+  description.id = 'auth-gate-description';
   description.textContent = 'The password is checked by the host process. The relay only forwards an encrypted attempt.';
 
   const alert = document.createElement('p');
   alert.className = 'auth-error';
+  alert.id = 'auth-gate-error';
   alert.setAttribute('role', 'alert');
   alert.hidden = true;
 
@@ -59,7 +63,10 @@ export function createAuthGate(root: HTMLElement, options: AuthGateOptions): Aut
   passwordInput.name = 'session-password';
   passwordInput.type = 'password';
   passwordInput.autocomplete = 'current-password';
+  passwordInput.autocapitalize = 'none';
+  passwordInput.spellcheck = false;
   passwordInput.required = true;
+  passwordInput.setAttribute('aria-describedby', `${description.id} ${alert.id}`);
 
   const submit = document.createElement('button');
   submit.type = 'submit';
@@ -83,9 +90,11 @@ export function createAuthGate(root: HTMLElement, options: AuthGateOptions): Aut
     if (!password) {
       alert.textContent = 'Enter the session password';
       alert.hidden = false;
+      passwordInput.setAttribute('aria-invalid', 'true');
       return;
     }
 
+    passwordInput.removeAttribute('aria-invalid');
     options.onSubmit({ password, ...(displayName ? { displayName } : {}) });
   }
 
@@ -102,6 +111,7 @@ export function createAuthGate(root: HTMLElement, options: AuthGateOptions): Aut
     showError(message: string): void {
       alert.textContent = message;
       alert.hidden = false;
+      passwordInput.setAttribute('aria-invalid', 'true');
     },
     remove(): void {
       panel.remove();
