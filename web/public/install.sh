@@ -17,7 +17,7 @@ os="$(uname -s)"
 case "$os" in
   Linux) os="linux" ;;
   Darwin) os="darwin" ;;
-  *) fail "unsupported OS: $os (only Linux and macOS have prebuilt binaries - see README for go install)" ;;
+  *) fail "unsupported OS: $os (this script covers Linux and macOS; on Windows download getsloth_windows_amd64.zip from https://github.com/${REPO}/releases)" ;;
 esac
 
 arch="$(uname -m)"
