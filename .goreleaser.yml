@@ -15,9 +15,14 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
+    ignore:
+      # CI only exercises Windows on amd64; don't ship an arch nobody has run.
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -s -w -X main.version={{.Version}}
 
@@ -26,6 +31,9 @@ archives:
     ids:
       - getsloth
     formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: >-
       getsloth_{{ .Os }}_{{ .Arch }}
     files:

@@ -39,3 +39,4 @@ feedback/*
 # Locally built binaries
 /cmd/getsloth/getsloth
 /cmd/getsloth-relay/getsloth-relay
+/dist/

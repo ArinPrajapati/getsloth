@@ -28,6 +28,13 @@ curl -fsSL https://getsloth.dev/install.sh | sh
 No Go toolchain required — this downloads a prebuilt binary for your
 OS/arch from [GitHub Releases](https://github.com/arinprajapati/getsloth/releases).
 
+**Windows:** download `getsloth_windows_amd64.zip` from the same
+[releases page](https://github.com/arinprajapati/getsloth/releases), unzip it,
+and run `getsloth.exe` from Windows Terminal or PowerShell. It needs Windows 10
+version 1809 or newer for the pseudoconsole it runs your command in. Windows
+hosting is covered by automated tests on a Windows runner and is newer than
+Linux and macOS, so please report anything odd.
+
 If you already have Go:
 
 ```
